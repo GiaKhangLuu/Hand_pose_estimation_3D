@@ -25,7 +25,7 @@ finger_joints_names = [
     "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP"
 ]
 
-window_sizes = [(0, 0), (650, 0), (1300, 0), (650, 550)]
+#window_sizes = [(0, 0), (650, 0), (1300, 0), (650, 550)]
 
 def plot_3d(origin_coords, x, y, z):
     fig = plt.figure()
@@ -405,7 +405,7 @@ if __name__ == "__main__":
                 # Show images
                 cv2.namedWindow('Hand Tracking', cv2.WINDOW_AUTOSIZE)
                 cv2.imshow('Hand Tracking', images)
-                cv2.moveWindow("Hand Tracking", window_sizes[0][0], window_sizes[0][1])
+                #cv2.moveWindow("Hand Tracking", window_sizes[0][0], window_sizes[0][1])
 
                 if cv2.waitKey(10) & 0xFF == ord("q"):
                     break
