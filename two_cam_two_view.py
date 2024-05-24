@@ -10,6 +10,11 @@ import queue
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
+# Apply bilateral filter
+d = 12            # Diameter of each pixel neighborhood
+sigma_color = 25 # Filter sigma in the color space
+sigma_space = 25 # Filter sigma in the coordinate space
+
 def unnormalize_landmarks(landmarks, window_size):
     unnorm_landmarks = landmarks[:, :-1]
     unnorm_landmarks[:, 0] = unnorm_landmarks[:, 0] * window_size[0]
@@ -27,31 +32,53 @@ def unnormalize_landmarks(landmarks, window_size):
 
     return unnorm_landmarks
 
-def get_depth(xy_landmarks, depth_image):
+def get_depth(xy_landmarks, depth_image, window_size):
+    half_size = window_size // 2
     xy_landmarks = xy_landmarks.astype(np.int32)
-    z_landmarks = depth_image[xy_landmarks[:, 1], xy_landmarks[:, 0]]
-    
-    return z_landmarks
+
+    x_min = np.maximum(0, xy_landmarks[:, 0] - half_size)
+    x_max = np.minimum(depth_image.shape[1] - 1, xy_landmarks[:, 0] + half_size)
+    y_min = np.maximum(0, xy_landmarks[:, 1] - half_size)
+    y_max = np.minimum(depth_image.shape[0] - 1, xy_landmarks[:, 1] + half_size)
+
+    xy_windows = np.concatenate([x_min[:, None], x_max[:, None], y_min[:, None], y_max[:, None]], axis=-1)
+
+    z_landmarks = []
+    for i in range(xy_windows.shape[0]):
+        z_values = depth_image[xy_windows[i, 2]:xy_windows[i, 3] + 1, xy_windows[i, 0]:xy_windows[i, 1] + 1]
+        mask = z_values > 0
+        z_values = z_values[mask]
+        z_median = np.median(z_values)
+        z_landmarks.append(z_median)
+
+    return np.array(z_landmarks)
 
 # RealSense processing function
 def process_realsense(rs_queue):
-    hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.5)
+    hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.5)
     pipeline_rs = rs.pipeline()
     config_rs = rs.config()
+
     config_rs.enable_stream(rs.stream.color, 640, 360, rs.format.bgr8, 30)
     config_rs.enable_stream(rs.stream.depth, 640, 360, rs.format.z16, 30)
     pipeline_rs.start(config_rs)
+
+    rsalign = rs.align(rs.stream.color)
+
     window_size = (640, 360)
 
     while True:
         frames = pipeline_rs.wait_for_frames()
+        frames = rsalign.process(frames) 
         color_frame_rs = frames.get_color_frame()
         depth_frame_rs = frames.get_depth_frame()
         if not color_frame_rs or not depth_frame_rs:
             continue
 
         frame_rs = np.asanyarray(color_frame_rs.get_data())
-        depth_rs = np.asanyarray(depth_frame_rs.get_data())
+        depth_rs = np.asanyarray(depth_frame_rs.get_data(), dtype=np.float32)
+
+        depth_rs = cv2.bilateralFilter(depth_rs, d, sigma_color, sigma_space)
 
         depth_rs_display = cv2.normalize(depth_rs, None, 0, 255, cv2.NORM_MINMAX)
         depth_rs_display = cv2.applyColorMap(depth_rs_display.astype(np.uint8), cv2.COLORMAP_JET)
@@ -74,11 +101,11 @@ def process_realsense(rs_queue):
 
                 landmarks_xy_unnorm = unnormalize_landmarks(raw_landmarks, window_size)
 
-                landmarks_Z = get_depth(landmarks_xy_unnorm, depth_rs)
+                landmarks_Z = get_depth(landmarks_xy_unnorm, depth_rs, window_size=d)
 
                 landmarks_xyZ = np.concatenate([landmarks_xy_unnorm, landmarks_Z[:, None]], axis=-1)
 
-                #print("RealSense xyz (hand {}): ".format(hand_num), landmarks_xyZ)
+                print("RealSense xyz (hand {}): ".format(hand_num), landmarks_xyZ)
 
         rs_combined = np.hstack((frame_rs, depth_rs_display))
         rs_queue.put(rs_combined)
@@ -88,7 +115,7 @@ def process_realsense(rs_queue):
 
 # OAK-D processing function
 def process_oak(oak_queue):
-    hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.5)
+    hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.5)
     pipeline_oak = dai.Pipeline()
 
     cam_rgb = pipeline_oak.create(dai.node.ColorCamera)
@@ -121,8 +148,8 @@ def process_oak(oak_queue):
     stereo.depth.link(xout_depth.input)
 
     device_oak = dai.Device(pipeline_oak)
-    rgb_queue_oak = device_oak.getOutputQueue(name="rgb", maxSize=4, blocking=False)
-    depth_queue_oak = device_oak.getOutputQueue(name="depth", maxSize=4, blocking=False)
+    rgb_queue_oak = device_oak.getOutputQueue(name="rgb", maxSize=2, blocking=False)
+    depth_queue_oak = device_oak.getOutputQueue(name="depth", maxSize=2, blocking=False)
 
     window_size = (640, 360)
 
@@ -132,9 +159,11 @@ def process_oak(oak_queue):
 
         frame_oak = rgb_frame_oak.getCvFrame()
         depth_oak = depth_frame_oak.getFrame()
+        depth_oak = depth_oak.astype(np.float32)
 
         frame_oak = cv2.resize(frame_oak, window_size)
         #depth_oak = cv2.resize(depth_oak, window_size)
+        depth_oak = cv2.bilateralFilter(depth_oak, d, sigma_color, sigma_space)
 
         depth_oak_display = cv2.normalize(depth_oak, None, 0, 255, cv2.NORM_MINMAX)
         depth_oak_display = cv2.applyColorMap(depth_oak_display.astype(np.uint8), cv2.COLORMAP_JET)
@@ -157,7 +186,7 @@ def process_oak(oak_queue):
 
                 landmarks_xy_unnorm = unnormalize_landmarks(raw_landmarks, window_size)
 
-                landmarks_Z = get_depth(landmarks_xy_unnorm, depth_oak)
+                landmarks_Z = get_depth(landmarks_xy_unnorm, depth_oak, window_size=d)
 
                 landmarks_xyZ = np.concatenate([landmarks_xy_unnorm, landmarks_Z[:, None]], axis=-1)
 
