@@ -1,4 +1,9 @@
+import sys
 import os
+
+CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(CURRENT_DIR, '..'))
+
 import yaml
 import cv2
 import mediapipe as mp
@@ -14,12 +19,12 @@ from functools import partial
 from typing import Tuple
 import time
 
-from tools import (detect_hand_landmarks, 
-                   filter_depth, get_xyZ, 
-                   fuse_landmarks_from_two_cameras, 
-                   convert_to_wrist_coord,
-                   calculate_angles_between_joints,
-                   plot_3d)
+from hand_landmarks.tools import (detect_hand_landmarks, 
+                                  filter_depth, get_xyZ, 
+                                  fuse_landmarks_from_two_cameras, 
+                                  convert_to_wrist_coord,
+                                  calculate_angles_between_joints,
+                                  plot_3d)
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 
 finger_joints_names = [
