@@ -215,7 +215,7 @@ if __name__ == "__main__":
             writs_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)
 
             # 4. Calculate angles
-            angles = calculate_angles_between_joints(writs_XYZ, fingers_XYZ_wrt_wrist, degrees=False)
+            #angles = calculate_angles_between_joints(writs_XYZ, fingers_XYZ_wrt_wrist, degrees=False)
 
             # 5. Plot (optional)
             plot_3d(writs_XYZ, fingers_XYZ_wrt_wrist[:, :, 0], fingers_XYZ_wrt_wrist[:, :, 1], fingers_XYZ_wrt_wrist[:, :, 2])

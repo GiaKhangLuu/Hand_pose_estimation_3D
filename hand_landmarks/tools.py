@@ -251,10 +251,38 @@ def calculate_angles_between_joints(wrist_XYZ: NDArray, fingers_XYZ_wrt_wrist: N
                                     fingers_XYZ_wrt_wrist[1:, 3, :] - fingers_XYZ_wrt_wrist[1:, 2, :],
                                     project_to="xy")
 
+    joint_1_weight = np.interp(np.absolute(angles[1:, 1]), [0, 90], [1, 0])
+    angles[1:, 0] *= joint_1_weight
+
+    angles = bound_angles(angles, degrees=True)
+
     if not degrees:
         angles = angles * math.pi / 180                                     
     return angles
 
+def bound_angles(angles, degrees=True):
+    joint_1_min_degree, joint_1_max_degree = -35, 35
+    joint_2_min_degree, joint_2_max_degree = -100, 8
+    joint_3_min_degree, joint_3_max_degree = -100, 8
+    joint_4_min_degree, joint_4_max_degree = -100, 8
+
+    if degrees:
+        joint_1_min, joint_1_max = joint_1_min_degree, joint_1_max_degree
+        joint_2_min, joint_2_max = joint_2_min_degree, joint_2_max_degree
+        joint_3_min, joint_3_max = joint_3_min_degree, joint_3_max_degree
+        joint_4_min, joint_4_max = joint_4_min_degree, joint_4_max_degree
+    else:
+        joint_1_min, joint_1_max = joint_1_min_degree * math.pi / 180, joint_1_max_degree * math.pi / 180
+        joint_2_min, joint_2_max = joint_2_min_degree * math.pi / 180, joint_2_max_degree * math.pi / 180
+        joint_3_min, joint_3_max = joint_3_min_degree * math.pi / 180, joint_3_max_degree * math.pi / 180
+        joint_4_min, joint_4_max = joint_4_min_degree * math.pi / 180, joint_4_max_degree * math.pi / 180
+
+    angles[:, 0] = np.clip(angles[:, 0], joint_1_min, joint_1_max)
+    angles[:, 1] = np.clip(angles[:, 1], joint_2_min, joint_2_max)
+    angles[:, 2] = np.clip(angles[:, 2], joint_3_min, joint_3_max)
+    angles[:, 3] = np.clip(angles[:, 3], joint_4_min, joint_4_max)
+
+    return angles
 
 def plot_3d(origin_coords, x, y, z):
     fig = plt.figure()
