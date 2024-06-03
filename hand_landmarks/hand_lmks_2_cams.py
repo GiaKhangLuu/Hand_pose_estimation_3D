@@ -18,6 +18,7 @@ from scipy.optimize import minimize
 from functools import partial
 from typing import Tuple
 import time
+import tensorflow as tf
 
 from hand_landmarks.tools import (detect_hand_landmarks, 
                                   filter_depth, get_xyZ, 
@@ -26,6 +27,7 @@ from hand_landmarks.tools import (detect_hand_landmarks,
                                   calculate_angles_between_joints,
                                   plot_3d)
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
+
 
 finger_joints_names = [
     "WRIST",
@@ -152,81 +154,87 @@ def get_frame(opposite_frame_queue,
         time.sleep(0.001)
 
 if __name__ == "__main__":
-    pipeline_rs, rsalign = initialize_realsense_cam(frame_size)
-    pipeline_oak = initialize_oak_cam(frame_size)
-    
-    #stream_rs(pipeline_rs, rsalign, opposite_landmarks_queue)
-    #stream_oak(rgb_queue_oak, depth_queue_oak, right_side_landmarks_queue)
 
-    # Start RealSense and OAK-D processing threads
-    rs_thread = threading.Thread(target=stream_rs, args=(pipeline_rs, rsalign, 
-                                                         opposite_frame_queue,), daemon=True)
-    oak_thread = threading.Thread(target=stream_oak, args=(pipeline_oak, frame_size, 
-                                                           right_side_frame_queue,), daemon=True)
-    detect_thread = threading.Thread(target=get_frame, args=(opposite_frame_queue,
-                                                             right_side_frame_queue,
-                                                             opposite_depth_queue,
-                                                             right_side_depth_queue,
-                                                             opposite_landmarks_detector,
-                                                             opposite_landmarks_queue,
-                                                             opposite_detection_results_queue,
-                                                             right_side_landmarks_detector,
-                                                             right_side_landmarks_queue,
-                                                             right_side_detection_results_queue,
-                                                             mp_drawing,
-                                                             mp_hands,), daemon=True)  
+    with tf.device("/GPU:0"):
 
-    rs_thread.start()
-    oak_thread.start()
-    detect_thread.start()
-
-    while True:
-
-        if not opposite_detection_results_queue.empty() and not right_side_detection_results_queue.empty():
-            opposite_frame_result = opposite_detection_results_queue.get()
-            right_side_frame_result = right_side_detection_results_queue.get()
-
-            frame_of_two_cam = np.vstack([opposite_frame_result, right_side_frame_result])
-
-            opposite_depth = None if opposite_depth_queue.empty() else opposite_depth_queue.get()
-            right_side_depth = None if right_side_depth_queue.empty() else right_side_depth_queue.get()
-
-            # 1. Get xyZ
-            if opposite_landmarks_queue.empty() or right_side_landmarks_queue.empty():
-                cv2.imshow("Frame", frame_of_two_cam)
-                continue
-
-            opposite_landmarks = opposite_landmarks_queue.get()        
-            right_side_landmarks = right_side_landmarks_queue.get()        
-            opposite_xyZ = get_xyZ(opposite_landmarks, opposite_depth, frame_size, sliding_window_size)
-            right_side_xyZ = get_xyZ(right_side_landmarks, right_side_depth, frame_size, sliding_window_size)
-
-            if np.isnan(opposite_xyZ).any() or np.isnan(right_side_xyZ).any():
-                cv2.imshow("Frame", frame_of_two_cam)
-                continue
-
-            # 2. Fuse landmarks of two cameras
-            fused_XYZ = fuse_landmarks_from_two_cameras(opposite_xyZ, right_side_xyZ,
-                                                        oak_ins,
-                                                        rs_ins,
-                                                        oak_2_rs_mat_avg) 
-
-            # 3. Convert to wrist coord
-            writs_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)
-
-            # 4. Calculate angles
-            #angles = calculate_angles_between_joints(writs_XYZ, fingers_XYZ_wrt_wrist, degrees=False)
-
-            # 5. Plot (optional)
-            plot_3d(writs_XYZ, fingers_XYZ_wrt_wrist[:, :, 0], fingers_XYZ_wrt_wrist[:, :, 1], fingers_XYZ_wrt_wrist[:, :, 2])
-
-            cv2.imshow("Frame", frame_of_two_cam)
-
+        pipeline_rs, rsalign = initialize_realsense_cam(frame_size)
+        pipeline_oak = initialize_oak_cam(frame_size)
         
-        if cv2.waitKey(10) & 0xFF == ord("q"):
-            break
-            cv2.destroyAllWindows()
+        #stream_rs(pipeline_rs, rsalign, opposite_landmarks_queue)
+        #stream_oak(rgb_queue_oak, depth_queue_oak, right_side_landmarks_queue)
 
-        #time.sleep(0.001)
-        #opposite_depth = None if self._opposite_depth_queue.empty() else self._opposite_depth_queue.get()
-        #right_side_depth = None if self._right_side_depth_queue.empty() else self._right_side_depth_queue.get()
+        # Start RealSense and OAK-D processing threads
+        rs_thread = threading.Thread(target=stream_rs, args=(pipeline_rs, rsalign, 
+                                                            opposite_frame_queue,), daemon=True)
+        oak_thread = threading.Thread(target=stream_oak, args=(pipeline_oak, frame_size, 
+                                                            right_side_frame_queue,), daemon=True)
+        detect_thread = threading.Thread(target=get_frame, args=(opposite_frame_queue,
+                                                                right_side_frame_queue,
+                                                                opposite_depth_queue,
+                                                                right_side_depth_queue,
+                                                                opposite_landmarks_detector,
+                                                                opposite_landmarks_queue,
+                                                                opposite_detection_results_queue,
+                                                                right_side_landmarks_detector,
+                                                                right_side_landmarks_queue,
+                                                                right_side_detection_results_queue,
+                                                                mp_drawing,
+                                                                mp_hands,), daemon=True)  
+
+        rs_thread.start()
+        oak_thread.start()
+        detect_thread.start()
+
+        while True:
+
+            if not opposite_detection_results_queue.empty() and not right_side_detection_results_queue.empty():
+                opposite_frame_result = opposite_detection_results_queue.get()
+                right_side_frame_result = right_side_detection_results_queue.get()
+
+                frame_of_two_cam = np.vstack([opposite_frame_result, right_side_frame_result])
+
+                opposite_depth = None if opposite_depth_queue.empty() else opposite_depth_queue.get()
+                right_side_depth = None if right_side_depth_queue.empty() else right_side_depth_queue.get()
+
+                # 1. Get xyZ
+                if opposite_landmarks_queue.empty() or right_side_landmarks_queue.empty():
+                    cv2.imshow("Frame", frame_of_two_cam)
+                    continue
+
+                opposite_landmarks = opposite_landmarks_queue.get()        
+                right_side_landmarks = right_side_landmarks_queue.get()        
+                opposite_xyZ = get_xyZ(opposite_landmarks, opposite_depth, frame_size, sliding_window_size)
+                right_side_xyZ = get_xyZ(right_side_landmarks, right_side_depth, frame_size, sliding_window_size)
+
+                if np.isnan(opposite_xyZ).any() or np.isnan(right_side_xyZ).any():
+                    cv2.imshow("Frame", frame_of_two_cam)
+                    continue
+
+                # 2. Fuse landmarks of two cameras
+                fused_XYZ = fuse_landmarks_from_two_cameras(opposite_xyZ, right_side_xyZ,
+                                                            oak_ins,
+                                                            rs_ins,
+                                                            oak_2_rs_mat_avg) 
+
+                # 3. Convert to wrist coord
+                writs_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)
+
+                print("wrist: ", writs_XYZ)
+                print("finger: ", fingers_XYZ_wrt_wrist)
+
+                ## 4. Calculate angles
+                angles = calculate_angles_between_joints(writs_XYZ, fingers_XYZ_wrt_wrist, degrees=False)
+
+                # 5. Plot (optional)
+                #plot_3d(writs_XYZ, fingers_XYZ_wrt_wrist[:1, :, 0], fingers_XYZ_wrt_wrist[:1, :, 1], fingers_XYZ_wrt_wrist[:1, :, 2])
+
+                cv2.imshow("Frame", frame_of_two_cam)
+
+            
+            if cv2.waitKey(10) & 0xFF == ord("q"):
+                break
+                cv2.destroyAllWindows()
+
+            #time.sleep(0.001)
+            #opposite_depth = None if self._opposite_depth_queue.empty() else self._opposite_depth_queue.get()
+            #right_side_depth = None if self._right_side_depth_queue.empty() else self._right_side_depth_queue.get()

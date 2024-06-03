@@ -130,7 +130,7 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
                           right_side_cam_intrinsic=right_side_cam_intrinsic,
                           opposite_cam_intrinsic=opposite_cam_intrinsic,
                           right_to_opposite_correctmat=right_to_opposite_correctmat)
-        result = minimize(min_dis, x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]])
+        result = minimize(min_dis, x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], tol=1e-4)
         right_side_i_new_Z, opposite_i_new_Z = result.x
         right_side_new_Z.append(right_side_i_new_Z)
         opposite_new_Z.append(opposite_i_new_Z)
@@ -315,9 +315,9 @@ def plot_3d(origin_coords, x, y, z):
     ax.set_zlabel('Z')
 
     # Set the limits for each axis
-    #ax.set_xlim(-20, 150)
-    #ax.set_ylim(0, 200)
-    #ax.set_zlim(-20, 100)  # Setting custom limits for z-axis
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.set_zlim(0, 100)  # Setting custom limits for z-axis
 
     fig.savefig('view_1.png')
 
