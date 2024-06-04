@@ -27,7 +27,8 @@ from hand_landmarks.tools import (detect_hand_landmarks,
                                   calculate_angles_between_joints,
                                   plot_3d)
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
-
+from hand_landmarks.stream_w_open3d import visualization_thread
+from hand_landmarks.write_lmks_to_file import write_lnmks_to_file
 
 finger_joints_names = [
     "WRIST",
@@ -60,6 +61,10 @@ right_side_detection_results_queue = queue.Queue()
 
 opposite_landmarks_queue = queue.Queue()
 right_side_landmarks_queue = queue.Queue()
+
+wrist_and_hand_lmks_queue = queue.Queue()
+
+write_queue = queue.Queue()
 
 # -------------------- GET TRANSFORMATION MATRIX -------------------- 
 oak_data = np.load('./camera_calibration/oak_calibration.npz')
@@ -156,14 +161,9 @@ def get_frame(opposite_frame_queue,
 if __name__ == "__main__":
 
     with tf.device("/GPU:0"):
-
         pipeline_rs, rsalign = initialize_realsense_cam(frame_size)
         pipeline_oak = initialize_oak_cam(frame_size)
-        
-        #stream_rs(pipeline_rs, rsalign, opposite_landmarks_queue)
-        #stream_oak(rgb_queue_oak, depth_queue_oak, right_side_landmarks_queue)
-
-        # Start RealSense and OAK-D processing threads
+            
         rs_thread = threading.Thread(target=stream_rs, args=(pipeline_rs, rsalign, 
                                                             opposite_frame_queue,), daemon=True)
         oak_thread = threading.Thread(target=stream_oak, args=(pipeline_oak, frame_size, 
@@ -180,10 +180,16 @@ if __name__ == "__main__":
                                                                 right_side_detection_results_queue,
                                                                 mp_drawing,
                                                                 mp_hands,), daemon=True)  
+        vis_thread = threading.Thread(target=visualization_thread, args=(wrist_and_hand_lmks_queue,), daemon=True)
+
+        # UNCOMMENT THIS THREAD TO SAVE LANDMARKS
+        write_lmks_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
 
         rs_thread.start()
         oak_thread.start()
         detect_thread.start()
+        vis_thread.start()
+        write_lmks_thread.start()
 
         while True:
 
@@ -217,24 +223,31 @@ if __name__ == "__main__":
                                                             oak_2_rs_mat_avg) 
 
                 # 3. Convert to wrist coord
-                writs_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)
+                wrist_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)
 
-                print("wrist: ", writs_XYZ)
-                print("finger: ", fingers_XYZ_wrt_wrist)
-
-                ## 4. Calculate angles
-                angles = calculate_angles_between_joints(writs_XYZ, fingers_XYZ_wrt_wrist, degrees=False)
+                # 4. Calculate angles
+                angles = calculate_angles_between_joints(wrist_XYZ, fingers_XYZ_wrt_wrist, degrees=True)
+                #thumb_angles = angles[1, :]
+                #print("J11: ", round(thumb_angles[0], 2))
+                #print("J12: ", round(thumb_angles[1], 2))
+                #print("J13: ", round(thumb_angles[2], 2))
+                #print("J14: ", round(thumb_angles[3], 2))
+                #print('---------------------------------')
 
                 # 5. Plot (optional)
-                #plot_3d(writs_XYZ, fingers_XYZ_wrt_wrist[:1, :, 0], fingers_XYZ_wrt_wrist[:1, :, 1], fingers_XYZ_wrt_wrist[:1, :, 2])
+                wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
+                write_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
+
+                if wrist_and_hand_lmks_queue.qsize() > 1:
+                    wrist_and_hand_lmks_queue.get()
+                if write_queue.qsize() > 1:
+                    write_queue.get()
 
                 cv2.imshow("Frame", frame_of_two_cam)
 
-            
+                
             if cv2.waitKey(10) & 0xFF == ord("q"):
                 break
                 cv2.destroyAllWindows()
 
-            #time.sleep(0.001)
-            #opposite_depth = None if self._opposite_depth_queue.empty() else self._opposite_depth_queue.get()
-            #right_side_depth = None if self._right_side_depth_queue.empty() else self._right_side_depth_queue.get()
+            time.sleep(0.001)

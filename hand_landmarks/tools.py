@@ -130,7 +130,7 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
                           right_side_cam_intrinsic=right_side_cam_intrinsic,
                           opposite_cam_intrinsic=opposite_cam_intrinsic,
                           right_to_opposite_correctmat=right_to_opposite_correctmat)
-        result = minimize(min_dis, x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], tol=1e-4)
+        result = minimize(min_dis, x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], tol=1e-1)
         right_side_i_new_Z, opposite_i_new_Z = result.x
         right_side_new_Z.append(right_side_i_new_Z)
         opposite_new_Z.append(opposite_i_new_Z)
@@ -229,32 +229,32 @@ def calculate_angles_between_joints(wrist_XYZ: NDArray, fingers_XYZ_wrt_wrist: N
 
     # Angles of J11 - > J51
     # The order of params a and b is important here, because we will compute determinant to get the direction
-    angles[1:, 0] = angle_between(vector_y,
-                                    fingers_XYZ_wrt_wrist[1:, 1, :] - fingers_XYZ_wrt_wrist[1:, 0, :],
+    angles[:, 0] = angle_between(vector_y,
+                                    fingers_XYZ_wrt_wrist[:, 1, :] - fingers_XYZ_wrt_wrist[:, 0, :],
                                     project_to="yz")
 
     # Angles of J12 - > J52
     # The order of params a and b is important here, because we will compute determinant to get the direction
-    angles[1:, 1] = angle_between(fingers_XYZ_wrt_wrist[1:, 0, :],
-                                    fingers_XYZ_wrt_wrist[1:, 1, :] - fingers_XYZ_wrt_wrist[1:, 0, :],
+    angles[:, 1] = angle_between(fingers_XYZ_wrt_wrist[:, 0, :],
+                                    fingers_XYZ_wrt_wrist[:, 1, :] - fingers_XYZ_wrt_wrist[:, 0, :],
                                     project_to="xy")
 
     # Angles of J13 - > J53
     # The order of params a and b is important here, because we will compute determinant to get the direction
-    angles[1:, 2] = angle_between(fingers_XYZ_wrt_wrist[1:, 1, :] - fingers_XYZ_wrt_wrist[1:, 0, :],
-                                    fingers_XYZ_wrt_wrist[1:, 2, :] - fingers_XYZ_wrt_wrist[1:, 1, :],
+    angles[:, 2] = angle_between(fingers_XYZ_wrt_wrist[:, 1, :] - fingers_XYZ_wrt_wrist[:, 0, :],
+                                    fingers_XYZ_wrt_wrist[:, 2, :] - fingers_XYZ_wrt_wrist[:, 1, :],
                                     project_to="xy")
 
     # Angles of J14 - > J54
     # The order of params a and b is important here, because we will compute determinant to get the direction
-    angles[1:, 3] = angle_between(fingers_XYZ_wrt_wrist[1:, 2, :] - fingers_XYZ_wrt_wrist[1:, 1, :],
-                                    fingers_XYZ_wrt_wrist[1:, 3, :] - fingers_XYZ_wrt_wrist[1:, 2, :],
+    angles[:, 3] = angle_between(fingers_XYZ_wrt_wrist[:, 2, :] - fingers_XYZ_wrt_wrist[:, 1, :],
+                                    fingers_XYZ_wrt_wrist[:, 3, :] - fingers_XYZ_wrt_wrist[:, 2, :],
                                     project_to="xy")
 
-    joint_1_weight = np.interp(np.absolute(angles[1:, 1]), [0, 90], [1, 0])
-    angles[1:, 0] *= joint_1_weight
+    joint_1_weight = np.interp(np.absolute(angles[:, 1]), [0, 90], [1, 0])
+    angles[:, 0] *= joint_1_weight
 
-    angles = bound_angles(angles, degrees=True)
+    #angles = bound_angles(angles, degrees=True)
 
     if not degrees:
         angles = angles * math.pi / 180                                     
