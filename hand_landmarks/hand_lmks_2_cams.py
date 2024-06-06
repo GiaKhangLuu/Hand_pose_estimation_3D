@@ -23,21 +23,11 @@ import tensorflow as tf
 from hand_landmarks.tools import (detect_hand_landmarks, 
                                   filter_depth, get_xyZ, 
                                   fuse_landmarks_from_two_cameras, 
-                                  convert_to_wrist_coord,
-                                  calculate_angles_between_joints,
-                                  plot_3d)
+                                  convert_to_wrist_coord)
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from hand_landmarks.stream_w_open3d import visualization_thread
 from hand_landmarks.write_lmks_to_file import write_lnmks_to_file
-
-finger_joints_names = [
-    "WRIST",
-    "THUMB_CMC", "THUMB_MCP", "THUMB_IP", "THUMB_TIP",
-    "INDEX_FINGER_MCP", "INDEX_FINGER_PIP", "INDEX_FINGER_DIP", "INDEX_FINGER_TIP",
-    "MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP",
-    "RING_FINGER_MCP", "RING_FINGER_PIP", "RING_FINGER_DIP", "RING_FINGER_TIP",
-    "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP"
-]
+from hand_landmarks.angle_calculation import get_angles_of_hand_joints
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
@@ -183,13 +173,13 @@ if __name__ == "__main__":
         vis_thread = threading.Thread(target=visualization_thread, args=(wrist_and_hand_lmks_queue,), daemon=True)
 
         # UNCOMMENT THIS THREAD TO SAVE LANDMARKS
-        write_lmks_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
+        #write_lmks_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
 
         rs_thread.start()
         oak_thread.start()
         detect_thread.start()
         vis_thread.start()
-        write_lmks_thread.start()
+        #write_lmks_thread.start()
 
         while True:
 
@@ -226,13 +216,12 @@ if __name__ == "__main__":
                 wrist_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)
 
                 # 4. Calculate angles
-                angles = calculate_angles_between_joints(wrist_XYZ, fingers_XYZ_wrt_wrist, degrees=True)
-                #thumb_angles = angles[1, :]
-                #print("J11: ", round(thumb_angles[0], 2))
-                #print("J12: ", round(thumb_angles[1], 2))
-                #print("J13: ", round(thumb_angles[2], 2))
-                #print("J14: ", round(thumb_angles[3], 2))
-                #print('---------------------------------')
+                angles = get_angles_of_hand_joints(wrist_XYZ, fingers_XYZ_wrt_wrist, degrees=True)
+                print("J1: ", angles[0, 0])
+                print("J2: ", angles[0, 1])
+                print("J3: ", angles[0, 2])
+                print("J4: ", angles[0, 3])
+                print('---------------------------------')
 
                 # 5. Plot (optional)
                 wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
