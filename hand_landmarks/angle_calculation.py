@@ -65,16 +65,20 @@ def calculate_angles_of_thumb(fingers_XYZ_wrt_wrist: NDArray) -> NDArray:
                   thumb[2, ...] - thumb[1, ...]])
 
     thumb_angles = calc_angle_between(a, b)                  
-    # Just need to get the direction of joint 3. Values of joint 1 and joint 2 
-    # range between 0 and 90 so we dont need to get the direction of these
-    j_3_sign = get_direction(a[-1, :], b[-1, :], -1)
-    thumb_angles[-1] = thumb_angles[-1] * j_3_sign[0]
+
+    # According to the right thumb: a[0, :] is x, b[0, :] is y => j_1_sign = '-' while J11 (of the left hand) move from middle finger 
+    # to the index finger and j_1_sign = '+' while J11 move from the middle finger to the last finger (pinky finger)
+    j_1_sign = get_direction(a[0, :], b[0, :], 1)[0] 
+    # According to the right thumb: a[1, :] is x, b[1, :] is y => j_2_sign = '+' while J12 (of the left hand) move from middle finger
+    # to the index finger and j_2_sign = '- while J12 move from the middle finger to the last finger (pinky finger)
+    j_2_sign = get_direction(a[1, :], b[1, :], 0)[0] 
+    j_3_sign = get_direction(a[-1, :], b[-1, :], -1)[0]
+    thumb_angles = thumb_angles * [j_1_sign, j_2_sign, j_3_sign]
 
     # Joint 4 uses the same value of joint 3
     thumb_angles = np.concatenate([thumb_angles, thumb_angles[-1:]])
 
     return thumb_angles
-
 
 def get_angles_of_hand_joints(wrist_XYZ: NDArray, fingers_XYZ_wrt_wrist: NDArray, degrees=False) -> NDArray:
 
@@ -130,8 +134,11 @@ def get_angles_of_hand_joints(wrist_XYZ: NDArray, fingers_XYZ_wrt_wrist: NDArray
 
     angles[0, :] = calculate_angles_of_thumb(fingers_XYZ_wrt_wrist)
 
-    angles[0, 0] = map_real_life_angles_to_rviz_angles(angles[0, 0], [0, 70], [35, -35])
-    angles[0, 1] = map_real_life_angles_to_rviz_angles(angles[0, 1], [0, 50], [-100, 8])
+    # Temporarily hard code the mapping angle
+    angles[0, 0] = map_real_life_angles_to_rviz_angles(angles[0, 0], [-70, 0], [-35, 35])
+    angles[0, 1] = map_real_life_angles_to_rviz_angles(angles[0, 1], [0, 40], [-90, 8])
+    angles[0, 2] = map_real_life_angles_to_rviz_angles(angles[0, 2], [-50, -10], [-90, 0])
+    angles[0, 3] = map_real_life_angles_to_rviz_angles(angles[0, 3], [-50, -10], [-90, 0])
 
     angles[:, 0] = bound_angles(angles[:, 0], -35, 35)
     angles[:, 1] = bound_angles(angles[:, 1], -100, 8)
@@ -141,8 +148,12 @@ def get_angles_of_hand_joints(wrist_XYZ: NDArray, fingers_XYZ_wrt_wrist: NDArray
     angles = np.round(angles)
 
     if not degrees:
-        angles = angles * math.pi / 180                                     
+        angles = degree_2_rad(angles)
     return angles
+
+def degree_2_rad(angles):
+    radian_angles = angles * math.pi / 180                                     
+    return radian_angles
 
 def map_real_life_angles_to_rviz_angles(angles, xp, fp):
     angles = np.interp(angles, xp, fp)
