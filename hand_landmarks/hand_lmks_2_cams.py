@@ -12,18 +12,15 @@ from numpy.typing import NDArray
 import math
 import queue
 import threading
-from scipy.spatial.transform import Rotation as R
-from scipy.spatial.distance import euclidean
-from scipy.optimize import minimize
-from functools import partial
-from typing import Tuple
 import time
 import tensorflow as tf
 
 from hand_landmarks.tools import (detect_hand_landmarks, 
                                   filter_depth, get_xyZ, 
                                   fuse_landmarks_from_two_cameras, 
-                                  convert_to_wrist_coord)
+                                  convert_to_wrist_coord,
+                                  load_data_from_npz_file,
+                                  get_oak_2_rs_matrix)
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from hand_landmarks.stream_w_open3d import visualization_thread
 from hand_landmarks.write_lmks_to_file import write_lnmks_to_file
@@ -57,33 +54,14 @@ wrist_and_hand_lmks_queue = queue.Queue()
 write_queue = queue.Queue()
 
 # -------------------- GET TRANSFORMATION MATRIX -------------------- 
-oak_data = np.load('./camera_calibration/oak_calibration.npz')
-rs_data = np.load('./camera_calibration/rs_calibration.npz')
+oak_data = load_data_from_npz_file('./camera_calibration/oak_calibration.npz')
+rs_data = load_data_from_npz_file('./camera_calibration/rs_calibration.npz')
 
 oak_r_raw, oak_t_raw, oak_ins = oak_data['rvecs'], oak_data['tvecs'], oak_data['camMatrix']
 rs_r_raw, rs_t_raw, rs_ins = rs_data['rvecs'], rs_data['tvecs'], rs_data['camMatrix']
 
-rs_r_raw = rs_r_raw.squeeze()
-rs_t_raw = rs_t_raw.squeeze()
-oak_r_raw = oak_r_raw.squeeze()
-oak_t_raw = oak_t_raw.squeeze()
-
-rs_r_mat = R.from_rotvec(rs_r_raw, degrees=False)
-rs_r_mat = rs_r_mat.as_matrix()
-
-oak_r_mat = R.from_rotvec(oak_r_raw, degrees=False)
-oak_r_mat = oak_r_mat.as_matrix()
-
-oak_r_t_mat = np.dstack([oak_r_mat, oak_t_raw[:, :, None]])
-rs_r_t_mat = np.dstack([rs_r_mat, rs_t_raw[:, :, None]])
-
-extra_row = np.array([0, 0, 0, 1] * oak_r_t_mat.shape[0]).reshape(-1, 4)[:, None, :]
-oak_r_t_mat = np.concatenate([oak_r_t_mat, extra_row], axis=1)
-rs_r_t_mat = np.concatenate([rs_r_t_mat, extra_row], axis=1)
-
-oak_r_t_mat_inv = np.linalg.inv(oak_r_t_mat)
-oak_2_rs_mat = np.matmul(rs_r_t_mat, oak_r_t_mat_inv)
-oak_2_rs_mat_avg = np.average(oak_2_rs_mat, axis=0)
+oak_2_rs_mat_avg = get_oak_2_rs_matrix(oak_r_raw, oak_t_raw, 
+                                       rs_r_raw, rs_t_raw)
 
 def get_frame(opposite_frame_queue, 
               right_side_frame_queue, 
@@ -156,7 +134,7 @@ if __name__ == "__main__":
     with tf.device("/GPU:0"):
         pipeline_rs, rsalign = initialize_realsense_cam(frame_size)
         pipeline_oak = initialize_oak_cam(frame_size)
-            
+                
         rs_thread = threading.Thread(target=stream_rs, args=(pipeline_rs, rsalign, 
                                                             opposite_frame_queue,), daemon=True)
         oak_thread = threading.Thread(target=stream_oak, args=(pipeline_oak, frame_size, 
@@ -173,16 +151,16 @@ if __name__ == "__main__":
                                                                 right_side_detection_results_queue,
                                                                 mp_drawing,
                                                                 mp_hands,), daemon=True)  
-        #vis_thread = threading.Thread(target=visualization_thread, args=(wrist_and_hand_lmks_queue,), daemon=True)
+        vis_thread = threading.Thread(target=visualization_thread, args=(wrist_and_hand_lmks_queue,), daemon=True)
 
         # UNCOMMENT THIS THREAD TO SAVE LANDMARKS
-        #write_lmks_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
+        write_lmks_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
 
         rs_thread.start()
         oak_thread.start()
         detect_thread.start()
-        #vis_thread.start()
-        #write_lmks_thread.start()
+        vis_thread.start()
+        write_lmks_thread.start()
 
         while True:
 
@@ -201,41 +179,42 @@ if __name__ == "__main__":
 
                 opposite_landmarks = opposite_landmarks_queue.get()        
                 right_side_landmarks = right_side_landmarks_queue.get()        
-                opposite_xyZ = get_xyZ(opposite_landmarks, opposite_depth, frame_size, sliding_window_size)
-                right_side_xyZ = get_xyZ(right_side_landmarks, right_side_depth, frame_size, sliding_window_size)
+                opposite_xyZ = get_xyZ(opposite_landmarks, opposite_depth, frame_size, sliding_window_size)  # shape: (21, 3)
+                right_side_xyZ = get_xyZ(right_side_landmarks, right_side_depth, frame_size, sliding_window_size)  # shape: (21, 3)
 
                 if np.isnan(opposite_xyZ).any() or np.isnan(right_side_xyZ).any():
                     cv2.imshow("Frame", frame_of_two_cam)
                     continue
 
                 # 2. Fuse landmarks of two cameras
-                fused_XYZ = fuse_landmarks_from_two_cameras(opposite_xyZ, right_side_xyZ,
+                fused_XYZ = fuse_landmarks_from_two_cameras(opposite_xyZ, right_side_xyZ,  # (21, 3)
                                                             oak_ins,
                                                             rs_ins,
                                                             oak_2_rs_mat_avg) 
 
                 # 3. Convert to wrist coord
-                wrist_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)
+                wrist_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)  # shapes: (3,), (5, 4, 3)
 
                 # 4. Calculate angles
                 angles = get_angles_of_hand_joints(wrist_XYZ, fingers_XYZ_wrt_wrist, degrees=True)
-                print("J1: ", angles[0, 0])
-                print("J2: ", angles[0, 1])
-                print("J3: ", angles[0, 2])
-                print("J4: ", angles[0, 3])
-                print('---------------------------------')
+                #print("J1: ", angles[0, 0])
+                #print("J2: ", angles[0, 1])
+                #print("J3: ", angles[0, 2])
+                #print("J4: ", angles[0, 3])
+                #print('---------------------------------')
 
                 # 5. Plot (optional)
-                #wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
-                #write_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
-
-                #if wrist_and_hand_lmks_queue.qsize() > 1:
-                    #wrist_and_hand_lmks_queue.get()
-                #if write_queue.qsize() > 1:
-                    #write_queue.get()
+                wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
+                write_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
+                
+                # 6. Save landmarks (optional)
+                if wrist_and_hand_lmks_queue.qsize() > 1:
+                    wrist_and_hand_lmks_queue.get()
+                if write_queue.qsize() > 1:
+                    write_queue.get()
 
                 cv2.imshow("Frame", frame_of_two_cam)
-                
+                    
             if cv2.waitKey(10) & 0xFF == ord("q"):
                 cv2.destroyAllWindows()
                 pipeline_rs.stop()

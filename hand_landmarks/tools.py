@@ -6,8 +6,11 @@ from mpl_toolkits.mplot3d import Axes3D
 from numpy.typing import NDArray
 from typing import Tuple
 from functools import partial
+from scipy.optimize import minimize
+from scipy.spatial.transform import Rotation as R
 from scipy.spatial.distance import euclidean
 from scipy.optimize import minimize
+from typing import Tuple
 
 finger_joints_names = [
     "WRIST",
@@ -18,7 +21,43 @@ finger_joints_names = [
     "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP"
 ]
 
+def load_data_from_npz_file(file_path):
+    data = np.load(file_path)
+
+    return data
+
+def get_oak_2_rs_matrix(oak_r_raw, oak_t_raw, 
+                        rs_r_raw, rs_t_raw):
+    rs_r_raw = rs_r_raw.squeeze()
+    rs_t_raw = rs_t_raw.squeeze()
+    oak_r_raw = oak_r_raw.squeeze()
+    oak_t_raw = oak_t_raw.squeeze()
+
+    rs_r_mat = R.from_rotvec(rs_r_raw, degrees=False)
+    rs_r_mat = rs_r_mat.as_matrix()
+
+    oak_r_mat = R.from_rotvec(oak_r_raw, degrees=False)
+    oak_r_mat = oak_r_mat.as_matrix()
+
+    oak_r_t_mat = np.dstack([oak_r_mat, oak_t_raw[:, :, None]])
+    rs_r_t_mat = np.dstack([rs_r_mat, rs_t_raw[:, :, None]])
+
+    extra_row = np.array([0, 0, 0, 1] * oak_r_t_mat.shape[0]).reshape(-1, 4)[:, None, :]
+    oak_r_t_mat = np.concatenate([oak_r_t_mat, extra_row], axis=1)
+    rs_r_t_mat = np.concatenate([rs_r_t_mat, extra_row], axis=1)
+
+    oak_r_t_mat_inv = np.linalg.inv(oak_r_t_mat)
+    oak_2_rs_mat = np.matmul(rs_r_t_mat, oak_r_t_mat_inv)
+    oak_2_rs_mat_avg = np.average(oak_2_rs_mat, axis=0)
+
+    return oak_2_rs_mat_avg
+
 def get_xyZ(landmarks, depth, frame_size, sliding_window_size):
+    """
+    Output:
+        xyZ: shape = (21, 3)
+    """
+
     assert depth is not None
     xyz = []
     for landmark in landmarks.landmark:
@@ -99,6 +138,13 @@ def distance(Z, right_side_xyZ, opposite_xyZ,
              right_side_cam_intrinsic, 
              opposite_cam_intrinsic,
              right_to_opposite_correctmat):
+    """
+    Input:
+        right_side_xyZ: shape = (3,)
+        opposite_xyZ: shape = (3,)
+        right_to_opposite_correctmat: shape = (4, 4)
+    """
+
     right_side_Z, opposite_Z = Z
     right_side_XYZ = np.zeros_like(right_side_xyZ)
     opposite_XYZ = np.zeros_like(opposite_xyZ)
@@ -122,6 +168,15 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
                                     right_side_cam_intrinsic,
                                     opposite_cam_intrinsic,
                                     right_to_opposite_correctmat) -> NDArray:
+    """
+    Input:
+        opposite_xyZ: shape = (21, 3)
+        right_side_xyZ: shape = (21, 3)
+        right_to_opposite_correctmat: shape = (4, 4)
+    Output:
+        fused_landmarks: shape (21, 3)
+    """
+
     right_side_new_Z, opposite_new_Z = [], []
     for i in range(right_side_xyZ.shape[0]):
         right_side_i_xyZ, opposite_i_xyZ = right_side_xyZ[i], opposite_xyZ[i]
@@ -140,18 +195,38 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
 
     right_side_new_xyZ[:, -1] = right_side_new_Z
     opposite_new_xyZ[:, -1] = opposite_new_Z
-    right_side_new_XYZ = np.zeros_like(right_side_new_xyZ)
-    opposite_new_XYZ = np.zeros_like(opposite_new_xyZ)
-    right_side_new_XYZ[:, 0] = (right_side_new_xyZ[:, 0] - right_side_cam_intrinsic[0, -1]) * right_side_new_xyZ[:, -1] / right_side_cam_intrinsic[0, 0]
-    right_side_new_XYZ[:, 1] = (right_side_new_xyZ[:, 1] - right_side_cam_intrinsic[1, -1]) * right_side_new_xyZ[:, -1] / right_side_cam_intrinsic[1, 1]
-    right_side_new_XYZ[:, -1] = right_side_new_xyZ[:, -1]
-    opposite_new_XYZ[:, 0] = (opposite_new_xyZ[:, 0] - opposite_cam_intrinsic[0, -1]) * opposite_new_xyZ[:, -1] / opposite_cam_intrinsic[0, 0]
-    opposite_new_XYZ[:, 1] = (opposite_new_xyZ[:, 1] - opposite_cam_intrinsic[1, -1]) * opposite_new_xyZ[:, -1] / opposite_cam_intrinsic[1, 1]
-    opposite_new_XYZ[:, -1] = opposite_new_xyZ[:, -1]
+
+    right_side_new_XYZ = xyZ_to_XYZ(right_side_new_xyZ, right_side_cam_intrinsic)
+    opposite_new_XYZ = xyZ_to_XYZ(opposite_new_xyZ, opposite_cam_intrinsic)
+
     fused_landmarks = (right_side_new_XYZ + opposite_new_XYZ) / 2
+
     return fused_landmarks
 
+def xyZ_to_XYZ(xyZ, intrinsic_mat):
+    """
+    Input:
+        xyZ: shape = (21, 3)
+    Output:
+        XYZ: shape = (21, 3)
+    """
+
+    XYZ = np.zeros_like(xyZ)
+    XYZ[:, 0] = (xyZ[:, 0] - intrinsic_mat[0, -1]) * xyZ[:, -1] / intrinsic_mat[0, 0]
+    XYZ[:, 1] = (xyZ[:, 1] - intrinsic_mat[1, -1]) * xyZ[:, -1] / intrinsic_mat[1, 1]
+    XYZ[:, -1] = xyZ[:, -1]
+
+    return XYZ 
+
 def convert_to_wrist_coord(XYZ_landmarks: NDArray) -> Tuple[NDArray, NDArray]:
+    """
+    Input: 
+        XYZ_landmarks: (21, 3)
+    Output:
+        wrist_XYZ: (3,)
+        fingers_XYZ_wrt_wrist: (5, 4, 3)
+    """
+
     u = XYZ_landmarks[finger_joints_names.index("INDEX_FINGER_MCP"), :] - XYZ_landmarks[finger_joints_names.index("WRIST"), :]
     y = XYZ_landmarks[finger_joints_names.index("MIDDLE_FINGER_MCP"), :] - XYZ_landmarks[finger_joints_names.index("WRIST"), :]
 
