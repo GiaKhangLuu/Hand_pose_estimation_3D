@@ -97,6 +97,9 @@ def get_frame(opposite_frame_queue,
               right_side_detection_results_queue,
               mp_drawing,
               mp_hands):
+    """
+    Detect hand's landmarks from two cameras
+    """
 
     sliding_window_size = 12 # Diameter of each pixel neighborhood
     sigma_color = 25 # Filter sigma in the color space for bilateral
@@ -170,7 +173,7 @@ if __name__ == "__main__":
                                                                 right_side_detection_results_queue,
                                                                 mp_drawing,
                                                                 mp_hands,), daemon=True)  
-        vis_thread = threading.Thread(target=visualization_thread, args=(wrist_and_hand_lmks_queue,), daemon=True)
+        #vis_thread = threading.Thread(target=visualization_thread, args=(wrist_and_hand_lmks_queue,), daemon=True)
 
         # UNCOMMENT THIS THREAD TO SAVE LANDMARKS
         #write_lmks_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
@@ -178,7 +181,7 @@ if __name__ == "__main__":
         rs_thread.start()
         oak_thread.start()
         detect_thread.start()
-        vis_thread.start()
+        #vis_thread.start()
         #write_lmks_thread.start()
 
         while True:
@@ -186,7 +189,6 @@ if __name__ == "__main__":
             if not opposite_detection_results_queue.empty() and not right_side_detection_results_queue.empty():
                 opposite_frame_result = opposite_detection_results_queue.get()
                 right_side_frame_result = right_side_detection_results_queue.get()
-
                 frame_of_two_cam = np.vstack([opposite_frame_result, right_side_frame_result])
 
                 opposite_depth = None if opposite_depth_queue.empty() else opposite_depth_queue.get()
@@ -224,19 +226,19 @@ if __name__ == "__main__":
                 print('---------------------------------')
 
                 # 5. Plot (optional)
-                wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
-                write_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
+                #wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
+                #write_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
 
-                if wrist_and_hand_lmks_queue.qsize() > 1:
-                    wrist_and_hand_lmks_queue.get()
-                if write_queue.qsize() > 1:
-                    write_queue.get()
+                #if wrist_and_hand_lmks_queue.qsize() > 1:
+                    #wrist_and_hand_lmks_queue.get()
+                #if write_queue.qsize() > 1:
+                    #write_queue.get()
 
                 cv2.imshow("Frame", frame_of_two_cam)
-
                 
             if cv2.waitKey(10) & 0xFF == ord("q"):
-                break
                 cv2.destroyAllWindows()
+                pipeline_rs.stop()
+                break
 
             time.sleep(0.001)
