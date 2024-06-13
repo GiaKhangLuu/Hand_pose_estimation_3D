@@ -14,6 +14,8 @@ import queue
 import threading
 import time
 import tensorflow as tf
+import torch
+import joblib
 
 from hand_landmarks.tools import (detect_hand_landmarks, 
                                   filter_depth, get_xyZ, 
@@ -26,6 +28,7 @@ from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs
 from hand_landmarks.stream_w_open3d import visualization_thread
 from hand_landmarks.write_lmks_to_file import write_lnmks_to_file
 from hand_landmarks.angle_calculation import get_angles_of_hand_joints
+from hand_landmarks.neural_networks import MLP
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
@@ -132,6 +135,26 @@ def get_frame(opposite_frame_queue,
 
 if __name__ == "__main__":
 
+    use_neural_network = True
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = None
+    scaler_input = None
+    scaler_output = None
+    print("Using {} for inference: ".format(device))
+
+    plot_3d = True
+    save_landmarks = False
+
+    if use_neural_network:
+        model_weight_path = "/home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/test/best_model.pth"
+        model = MLP()
+        model.load_state_dict(torch.load(model_weight_path))
+        model.eval()
+        model.to(device)
+
+        scaler_input = joblib.load("/home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/test/scaler_input.pkl")
+        scaler_output = joblib.load("/home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/test/scaler_output.pkl")
+
     with tf.device("/GPU:0"):
         pipeline_rs, rsalign = initialize_realsense_cam(frame_size)
         pipeline_oak = initialize_oak_cam(frame_size)
@@ -187,43 +210,67 @@ if __name__ == "__main__":
                     cv2.imshow("Frame", frame_of_two_cam)
                     continue
 
-                # 2. Fuse landmarks of two cameras
-                fused_XYZ = fuse_landmarks_from_two_cameras(opposite_xyZ, right_side_xyZ,  # (21, 3)
-                                                            oak_ins,
-                                                            rs_ins,
-                                                            oak_2_rs_mat_avg) 
+                if not use_neural_network:
+                    # 2. Fuse landmarks of two cameras
+                    fused_XYZ = fuse_landmarks_from_two_cameras(opposite_xyZ, right_side_xyZ,  # (21, 3)
+                                                                oak_ins,
+                                                                rs_ins,
+                                                                oak_2_rs_mat_avg) 
 
-                # 3. Convert to wrist coord
-                wrist_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)  # shapes: (3,), (5, 4, 3)
+                    # 3. Convert to wrist coord
+                    wrist_XYZ, fingers_XYZ_wrt_wrist = convert_to_wrist_coord(fused_XYZ)  # shapes: (3,), (5, 4, 3)
+                else:
+                    # If using neural_network, a model predicts all landmarks w.r.t. wrist coordinates
+                    # Need to convert landmarks_of_rightside_cam to opposite_cam coordinate and normalize
+                    raw_XYZ_of_opposite_cam = xyZ_to_XYZ(opposite_xyZ, rs_ins)  # shape: (21, 3)
+                    raw_XYZ_of_right_side_cam = xyZ_to_XYZ(right_side_xyZ, oak_ins)  # shape: (21, 3)
+                    homo = np.ones(shape=raw_XYZ_of_right_side_cam.shape[0])
+                    raw_XYZ_of_right_side_cam_in_opposite_cam = np.concatenate([raw_XYZ_of_right_side_cam, homo[:, None]], axis=1)  # shape: (21, 4)
+                    raw_XYZ_of_right_side_cam_in_opposite_cam = np.matmul(oak_2_rs_mat_avg,   # shape: (4, 21)
+                                                                          raw_XYZ_of_right_side_cam_in_opposite_cam.T)
+                    raw_XYZ_of_right_side_cam_in_opposite_cam = raw_XYZ_of_right_side_cam_in_opposite_cam.T  # shape: (21, 4)
+                    raw_XYZ_of_right_side_cam_in_opposite_cam = raw_XYZ_of_right_side_cam_in_opposite_cam[:, :-1]  # shape: (21, 3)
+
+                    lmks_input = np.concatenate([raw_XYZ_of_opposite_cam, 
+                                                 raw_XYZ_of_right_side_cam_in_opposite_cam], axis=0)  # shape: (42, 3)
+                    lmks_input = lmks_input.flatten()[None, :]  # shape: (1, 126)
+                    lmks_input = scaler_input.transform(lmks_input)
+                    lmks_input = torch.tensor(lmks_input, dtype=torch.float32).to(device)
+
+                    lmks_output = model(lmks_input)  # shape: (1, 63)
+                    lmks_output = lmks_output.detach().to("cpu").numpy()
+                    lmks_output = scaler_output.inverse_transform(lmks_output)
+                    lmks_output = lmks_output[0]  # shape: (63,)
+                    lmks_output = lmks_output.reshape(-1, 3)  # shape: (21, 3)
+
+                    wrist_XYZ, fingers_XYZ_wrt_wrist = lmks_output[0, :], lmks_output[1:, :]
+                    fingers_XYZ_wrt_wrist = fingers_XYZ_wrt_wrist.reshape(5, 4, 3) 
 
                 # 4. Calculate angles
                 angles = get_angles_of_hand_joints(wrist_XYZ, fingers_XYZ_wrt_wrist, degrees=True)
-                #print("J1: ", angles[0, 0])
-                #print("J2: ", angles[0, 1])
-                #print("J3: ", angles[0, 2])
-                #print("J4: ", angles[0, 3])
-                #print('---------------------------------')
 
                 # 5. Plot (optional)
-                wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
-                if wrist_and_hand_lmks_queue.qsize() > 1:
-                    wrist_and_hand_lmks_queue.get()
+                if plot_3d:
+                    wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
+                    if wrist_and_hand_lmks_queue.qsize() > 1:
+                        wrist_and_hand_lmks_queue.get()
                 
                 # 6. Save landmarks (optional)
-                raw_XYZ_of_opposite_cam = xyZ_to_XYZ(opposite_xyZ, rs_ins)  # shape: (21, 3)
-                raw_XYZ_of_right_side_cam = xyZ_to_XYZ(right_side_xyZ, oak_ins)  # shape: (21, 3)
-                homo = np.ones(shape=raw_XYZ_of_right_side_cam.shape[0])
-                raw_XYZ_of_right_side_cam_in_opposite_cam = np.concatenate([raw_XYZ_of_right_side_cam, homo[:, None]], axis=1)  # shape: (21, 4)
-                raw_XYZ_of_right_side_cam_in_opposite_cam = np.matmul(oak_2_rs_mat_avg,   # shape: (4, 21)
-                                                                      raw_XYZ_of_right_side_cam_in_opposite_cam.T)
-                raw_XYZ_of_right_side_cam_in_opposite_cam = raw_XYZ_of_right_side_cam_in_opposite_cam.T  # shape: (21, 4)
+                if save_landmarks:
+                    raw_XYZ_of_opposite_cam = xyZ_to_XYZ(opposite_xyZ, rs_ins)  # shape: (21, 3)
+                    raw_XYZ_of_right_side_cam = xyZ_to_XYZ(right_side_xyZ, oak_ins)  # shape: (21, 3)
+                    homo = np.ones(shape=raw_XYZ_of_right_side_cam.shape[0])
+                    raw_XYZ_of_right_side_cam_in_opposite_cam = np.concatenate([raw_XYZ_of_right_side_cam, homo[:, None]], axis=1)  # shape: (21, 4)
+                    raw_XYZ_of_right_side_cam_in_opposite_cam = np.matmul(oak_2_rs_mat_avg,   # shape: (4, 21)
+                                                                        raw_XYZ_of_right_side_cam_in_opposite_cam.T)
+                    raw_XYZ_of_right_side_cam_in_opposite_cam = raw_XYZ_of_right_side_cam_in_opposite_cam.T  # shape: (21, 4)
 
-                write_queue.put((raw_XYZ_of_opposite_cam,
-                                 raw_XYZ_of_right_side_cam_in_opposite_cam[:, :-1],
-                                 wrist_XYZ, 
-                                 fingers_XYZ_wrt_wrist))
-                if write_queue.qsize() > 1:
-                    write_queue.get()
+                    write_queue.put((raw_XYZ_of_opposite_cam,
+                                    raw_XYZ_of_right_side_cam_in_opposite_cam[:, :-1],
+                                    wrist_XYZ, 
+                                    fingers_XYZ_wrt_wrist))
+                    if write_queue.qsize() > 1:
+                        write_queue.get()
 
                 cv2.imshow("Frame", frame_of_two_cam)
                     
