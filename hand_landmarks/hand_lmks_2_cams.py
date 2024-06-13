@@ -28,7 +28,7 @@ from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs
 from hand_landmarks.stream_w_open3d import visualization_thread
 from hand_landmarks.write_lmks_to_file import write_lnmks_to_file
 from hand_landmarks.angle_calculation import get_angles_of_hand_joints
-from hand_landmarks.neural_networks import MLP
+from hand_landmarks.neural_networks.mlp import MLP
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
@@ -142,8 +142,9 @@ if __name__ == "__main__":
     scaler_output = None
     print("Using {} for inference: ".format(device))
 
-    plot_3d = True
-    save_landmarks = False
+    plot_3d = True  # Plot the hand landmarks on open3d
+    save_landmarks = False  # Write landmarks to to file
+    run_online = True  # If run_online, get landmarks from 2 cameras. Otherwise, get landmarks from file
 
     if use_neural_network:
         model_weight_path = "/home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/test/best_model.pth"
@@ -179,6 +180,11 @@ if __name__ == "__main__":
 
         # UNCOMMENT THIS THREAD TO SAVE LANDMARKS
         write_lmks_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
+
+        # Initialize variables
+        frame_count = 0
+        start_time = time.time()
+        fps = 0
 
         rs_thread.start()
         oak_thread.start()
@@ -271,6 +277,19 @@ if __name__ == "__main__":
                                     fingers_XYZ_wrt_wrist))
                     if write_queue.qsize() > 1:
                         write_queue.get()
+
+                frame_count += 1
+                # Calculate elapsed time
+                elapsed_time = time.time() - start_time
+
+                # Update FPS every second
+                if elapsed_time > 1.0:
+                    fps = frame_count / elapsed_time
+                    frame_count = 0
+                    start_time = time.time()
+
+                # Overlay the FPS on the frame
+                cv2.putText(frame_of_two_cam, f'FPS: {fps:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
                 cv2.imshow("Frame", frame_of_two_cam)
                     
