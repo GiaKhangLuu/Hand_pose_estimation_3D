@@ -20,7 +20,8 @@ from hand_landmarks.tools import (detect_hand_landmarks,
                                   fuse_landmarks_from_two_cameras, 
                                   convert_to_wrist_coord,
                                   load_data_from_npz_file,
-                                  get_oak_2_rs_matrix)
+                                  get_oak_2_rs_matrix,
+                                  xyZ_to_XYZ)
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from hand_landmarks.stream_w_open3d import visualization_thread
 from hand_landmarks.write_lmks_to_file import write_lnmks_to_file
@@ -205,11 +206,22 @@ if __name__ == "__main__":
 
                 # 5. Plot (optional)
                 wrist_and_hand_lmks_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
-                write_queue.put((wrist_XYZ, fingers_XYZ_wrt_wrist))
-                
-                # 6. Save landmarks (optional)
                 if wrist_and_hand_lmks_queue.qsize() > 1:
                     wrist_and_hand_lmks_queue.get()
+                
+                # 6. Save landmarks (optional)
+                raw_XYZ_of_opposite_cam = xyZ_to_XYZ(opposite_xyZ, rs_ins)  # shape: (21, 3)
+                raw_XYZ_of_right_side_cam = xyZ_to_XYZ(right_side_xyZ, oak_ins)  # shape: (21, 3)
+                homo = np.ones(shape=raw_XYZ_of_right_side_cam.shape[0])
+                raw_XYZ_of_right_side_cam_in_opposite_cam = np.concatenate([raw_XYZ_of_right_side_cam, homo[:, None]], axis=1)  # shape: (21, 4)
+                raw_XYZ_of_right_side_cam_in_opposite_cam = np.matmul(oak_2_rs_mat_avg,   # shape: (4, 21)
+                                                                      raw_XYZ_of_right_side_cam_in_opposite_cam.T)
+                raw_XYZ_of_right_side_cam_in_opposite_cam = raw_XYZ_of_right_side_cam_in_opposite_cam.T  # shape: (21, 4)
+
+                write_queue.put((raw_XYZ_of_opposite_cam,
+                                 raw_XYZ_of_right_side_cam_in_opposite_cam[:, :-1],
+                                 wrist_XYZ, 
+                                 fingers_XYZ_wrt_wrist))
                 if write_queue.qsize() > 1:
                     write_queue.get()
 

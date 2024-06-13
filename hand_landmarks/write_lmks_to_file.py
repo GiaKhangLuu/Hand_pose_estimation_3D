@@ -15,19 +15,19 @@ def write_lnmks_to_file(lmks_queue, file_name='hand_landmarks_2024_06_12.npz'):
             print('----------------------- Saving ----------------------- ')
 
             if not lmks_queue.empty():
-                # landmarks_of_cam_1: (21, 3)
-                # landmarks_of_cam_2_in_cam_1_coord: (21, 3)
+                # raw_XYZ_of_opposite_cam: (21, 3)
+                # raw_XYZ_of_right_side_cam_in_opposite_cam: (21, 3)
                 # wrist_gt: (3,)
                 # finger_lmks_gt: (5, 4, 3)
-                landmarks_of_cam_1, landmarks_of_cam_2_in_cam_1_coord, wrist_gt, finger_lmks_gt = lmks_queue.get() 
+                raw_XYZ_of_opposite_cam, raw_XYZ_of_right_side_cam_in_opposite_cam, wrist_gt, finger_lmks_gt = lmks_queue.get() 
 
                 # Save GTs
                 finger_lmks_gt = np.reshape(finger_lmks_gt, (-1, 3))  # shape: (20, 3)
                 landmarks_gt = np.vstack((wrist_gt[None, :], finger_lmks_gt))  # shape: (21, 3)
-                lmks_gt_all_frame.append(landmarks_gt)
+                lmks_gt_all_frame.append(landmarks_gt) 
 
                 # Save input
-                lmks_input = np.concatenate([landmarks_of_cam_1, landmarks_of_cam_2_in_cam_1_coord], axis=0)
+                lmks_input = np.concatenate([raw_XYZ_of_opposite_cam, raw_XYZ_of_right_side_cam_in_opposite_cam], axis=0)  # shape: (42, 3)
                 lmks_input_all_frame.append(lmks_input)
 
                 count += 1
