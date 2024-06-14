@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 import math
 import matplotlib.pyplot as plt
+import yaml
+
 from mpl_toolkits.mplot3d import Axes3D
 from numpy.typing import NDArray
 from typing import Tuple
@@ -206,15 +208,15 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
 def xyZ_to_XYZ(xyZ, intrinsic_mat):
     """
     Input:
-        xyZ: shape = (21, 3)
+        xyZ: shape = (21, 3) or (N, 21, 3)
     Output:
-        XYZ: shape = (21, 3)
+        XYZ: shape = (21, 3) or (N, 21, 3)
     """
 
     XYZ = np.zeros_like(xyZ)
-    XYZ[:, 0] = (xyZ[:, 0] - intrinsic_mat[0, -1]) * xyZ[:, -1] / intrinsic_mat[0, 0]
-    XYZ[:, 1] = (xyZ[:, 1] - intrinsic_mat[1, -1]) * xyZ[:, -1] / intrinsic_mat[1, 1]
-    XYZ[:, -1] = xyZ[:, -1]
+    XYZ[..., 0] = (xyZ[..., 0] - intrinsic_mat[0, -1]) * xyZ[..., -1] / intrinsic_mat[0, 0]
+    XYZ[..., 1] = (xyZ[..., 1] - intrinsic_mat[1, -1]) * xyZ[..., -1] / intrinsic_mat[1, 1]
+    XYZ[..., -1] = xyZ[..., -1]
 
     return XYZ 
 
@@ -250,3 +252,37 @@ def convert_to_wrist_coord(XYZ_landmarks: NDArray) -> Tuple[NDArray, NDArray]:
     wrist_XYZ, fingers_XYZ_wrt_wrist = XYZ_wrt_wrist[0, :-1], XYZ_wrt_wrist[1:, :-1]
     fingers_XYZ_wrt_wrist = fingers_XYZ_wrt_wrist.reshape(5, 4, 3)
     return wrist_XYZ, fingers_XYZ_wrt_wrist
+
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
+
+def transform_to_another_coordinate(points, trans_matrix):
+    """
+    Input:
+        points: shape = (21, 3) or (N, 21, 3)
+        trans_matrix: shape = (4, 4)
+    Output:
+        transformed_points: shape = (21, 3) or (N, 21, 3)
+    """
+
+    assert points.shape[-1] == 3
+    assert points.ndim in [2, 3]
+    assert trans_matrix.shape == (4, 4)
+
+    homo = np.ones(shape=points.shape[:-1])  # shape: (21,) or (N, 21)
+    points = np.concatenate([points, homo[..., None]], axis=-1)  # shape: (21, 4) or (N, 21, 4)
+
+    if points.ndim == 2:
+        transformed_points = np.matmul(trans_matrix,   
+                                       points.T)  # shape: (4, 21)
+        transformed_points = transformed_points.T  # shape: (21, 4)
+    else:
+        transformed_points = np.matmul(trans_matrix,
+                                       np.transpose(points, axes=(0, 2, 1)))  # shape: (N, 4, 21)
+        transformed_points = np.transpose(transformed_points, axes=(0, 2, 1))  # shape: (N, 21, 4)
+    transformed_points = transformed_points[..., :-1]  # shape: (21, 3) or (N, 21, 3)
+
+    return transformed_points
+
