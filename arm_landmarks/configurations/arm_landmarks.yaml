@@ -1,0 +1,58 @@
+frame_width: 640
+frame_height: 360
+
+sliding_window_size: 12 # Diameter of each pixel neighborhood
+sigma_color: 25         # Filter sigma in the color space for bilateral
+sigma_space: 25         # Filter sigma in the coordinate space for bilateral
+
+arm_to_get: left
+
+utilities:
+  plot_3d: true              # Plot the hand landmarks on open3d
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+
+camera:
+  rightside_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/oak_calibration.npz
+  opposite_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/rs_calibration.npz
+
+mediapipe:
+  is_activated: true
+  min_detection_confidence: 0.4
+  min_tracking_confidence: 0.4
+  model_complexity: 0
+  visibility_threshold: 0.2
+
+pose_landmarks:
+  - nose
+  - left eye (inner)
+  - left eye
+  - left eye (outer)
+  - right eye (inner)
+  - right eye
+  - right eye (outer)
+  - left ear
+  - right ear
+  - mouth (left)
+  - mouth (right)
+  - left shoulder
+  - right shoulder
+  - left elbow
+  - right elbow
+  - left wrist
+  - right wrist
+  - left pinky
+  - right pinky
+  - left index
+  - right index
+  - left thumb
+  - right thumb
+  - left hip
+  - right hip
+  - left knee
+  - right knee
+  - left ankle
+  - right ankle
+  - left heel
+  - right heel
+  - left foot index
+  - right foot index

@@ -5,13 +5,14 @@ import pyrealsense2 as rs
 import threading
 import queue
 import os
+import shutil
 
 # RealSense processing function
 def process_realsense(rs_queue):
     pipeline_rs = rs.pipeline()
     config_rs = rs.config()
-    config_rs.enable_stream(rs.stream.color, 640, 360, rs.format.bgr8, 30)
-    config_rs.enable_stream(rs.stream.depth, 640, 360, rs.format.z16, 30)
+    config_rs.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
+    config_rs.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
     pipeline_rs.start(config_rs)
 
     while True:
@@ -49,7 +50,7 @@ def process_oak(oak_queue):
 
         frame_oak = rgb_frame_oak.getCvFrame()
 
-        frame_oak = cv2.resize(frame_oak, (640, 360))
+        frame_oak = cv2.resize(frame_oak, (1280, 720))
         #depth_oak_display = cv2.resize(depth_oak, (640, 480))
 
         oak_queue.put(frame_oak)
@@ -73,8 +74,9 @@ rs_path = './images/rs'
 oak_path = './images/oak'
 
 
-if not os.path.exists(folder_path):
-    os.makedirs(folder_path)
+if os.path.exists(folder_path):
+    shutil.rmtree(folder_path)
+os.makedirs(folder_path)
 
 if not os.path.exists(rs_path):
     os.makedirs(rs_path)

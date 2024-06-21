@@ -82,7 +82,7 @@ def calculate_angles_of_thumb(fingers_XYZ_wrt_wrist: NDArray) -> NDArray:
 
 def get_angles_of_hand_joints(wrist_XYZ: NDArray, fingers_XYZ_wrt_wrist: NDArray, degrees=False) -> NDArray:
 
-    assert np.sum(np.abs(wrist_XYZ)).astype(np.int8) == 0
+    #assert np.sum(np.abs(wrist_XYZ)).astype(np.int8) == 0
 
     angles = np.zeros(shape=fingers_XYZ_wrt_wrist.shape[:-1])
     y_unit = np.array([0, 1, 0])

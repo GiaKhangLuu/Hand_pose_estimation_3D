@@ -6,7 +6,15 @@ from datetime import datetime
 from sklearn.model_selection import train_test_split
 
 CURR_FOLDER = os.path.dirname(os.path.abspath(__file__))
-DATA_FOLDER = os.path.join(CURR_FOLDER, "data")
+
+now = datetime.now()
+year, month, day = str(now.year), str(now.month), str(now.day)
+month = "0{}".format(month) if len(month) == 1 else month
+day = "0{}".format(day) if len(day) == 1 else day
+DATA_FOLDER = os.path.join(CURR_FOLDER, "data", "{}_{}_{}".format(year, month, day))
+
+if not os.path.exists(DATA_FOLDER):
+    os.makedirs(DATA_FOLDER)
 
 sys.path.append(os.path.join(CURR_FOLDER, '..'))
 
@@ -128,7 +136,7 @@ def write_lnmks_to_file(lmks_queue, rs_ins, oak_ins, oak_2_rs_mat):
     lmks_output = landmarks_output_through_frames.reshape(landmarks_output_through_frames.shape[0], -1)  # shape: (N, 21 * 3)
 
     # Split the data into training and testing sets
-    X_train, X_test, Y_train, Y_test = train_test_split(lmks_input, lmks_output, test_size=0.2, random_state=42)
+    X_train, X_test, Y_train, Y_test = train_test_split(lmks_input, lmks_output, test_size=0.2, random_state=10)
 
     train_data = np.concatenate([X_train, Y_train], axis=1)
     test_data = np.concatenate([X_test, Y_test], axis=1)

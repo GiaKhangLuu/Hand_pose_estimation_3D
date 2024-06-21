@@ -1,13 +1,13 @@
 neural_network:
   is_used: false
   device: cuda
-  model_weight_path: /home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/neural_networks/weights/best_model.pth
-  scaler_input_path: /home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/neural_networks/scaler/scaler_X.pkl
-  scaler_output_path: /home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/neural_networks/scaler/scaler_Y.pkl
+  model_weight_path: /home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/neural_networks/mlp_v2_weights/2024_06_17/best_model.pth
+  scaler_input_path: /home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/neural_networks/scaler/2024_06_17/scaler_X.pkl
+  scaler_output_path: /home/giakhang/dev/Hand_pose_estimation_3D/hand_landmarks/neural_networks/scaler/2024_06_17/scaler_Y.pkl
 
 utilities:
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
 
 camera:
   rightside_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/oak_calibration.npz

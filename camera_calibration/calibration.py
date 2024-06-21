@@ -36,6 +36,7 @@ def calibrate(cam, is_found_in_both_cams, showPics=True):
             print(curImgPath)
             imgBGR = cv2.imread(os.path.join(calibrationDir, curImgPath))
             imgGray = cv2.cvtColor(imgBGR, cv2.COLOR_BGR2GRAY)
+            imgGray = cv2.equalizeHist(imgGray)
             cornersFound, cornersOrg = cv2.findChessboardCorners(imgGray, (nRows, nCols), None)
 
             if cornersFound == True:
@@ -99,6 +100,7 @@ if __name__ == "__main__":
             curImgPath = os.path.join(calibrationDir, curImgPath)
             imgBGR = cv2.imread(curImgPath)
             imgGray = cv2.cvtColor(imgBGR, cv2.COLOR_BGR2GRAY)
+            imgGray = cv2.equalizeHist(imgGray)
             cornersFound, cornersOrg = cv2.findChessboardCorners(imgGray, (nRows, nCols), None)
 
             is_find_corners.append(cornersFound)

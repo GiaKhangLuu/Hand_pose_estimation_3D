@@ -286,3 +286,37 @@ def transform_to_another_coordinate(points, trans_matrix):
 
     return transformed_points
 
+def transform_to_mlp_v3(lmks_input):
+    lmks_input_cam_1 = lmks_input[..., :21*3]  # shape: (1, 63)
+    lmks_input_cam_2 = lmks_input[..., 21*3:]  # shape: (1, 63)
+
+    assert lmks_input_cam_1.shape[-1] == 63
+    assert lmks_input_cam_2.shape[-1] == 63
+
+    index_cam_1 = lmks_input_cam_1[..., finger_joints_names.index("INDEX_FINGER_MCP")*3:finger_joints_names.index("INDEX_FINGER_MCP")*3+3]  # shape: (1, 3)
+    middle_cam_1 = lmks_input_cam_1[..., finger_joints_names.index("MIDDLE_FINGER_MCP")*3:finger_joints_names.index("MIDDLE_FINGER_MCP")*3+3]  # shape: (1, 3)
+    wrist_cam_1 = lmks_input_cam_1[..., finger_joints_names.index("WRIST")*3:finger_joints_names.index("WRIST")*3+3]  # shape: (1, 3)
+
+    index_cam_2 = lmks_input_cam_2[..., finger_joints_names.index("INDEX_FINGER_MCP")*3:finger_joints_names.index("INDEX_FINGER_MCP")*3+3]    # shape: (1, 3)
+    middle_cam_2 = lmks_input_cam_2[..., finger_joints_names.index("MIDDLE_FINGER_MCP")*3:finger_joints_names.index("MIDDLE_FINGER_MCP")*3+3]  # shape: (1, 3)
+    wrist_cam_2 = lmks_input_cam_2[..., finger_joints_names.index("WRIST")*3:finger_joints_names.index("WRIST")*3+3]  # shape: (1, 3)
+
+    lmks_input_cam_1 = lmks_input_cam_1.reshape(-1, 3)  # shape: (21, 3)
+    lmks_input_cam_2 = lmks_input_cam_2.reshape(-1, 3)  # shape: (21, 3)
+
+    index_cam_1 = np.repeat(index_cam_1, repeats=21, axis=0)  # shape: (21, 3)
+    middle_cam_1 = np.repeat(middle_cam_1, repeats=21, axis=0)  # shape: (21, 3)
+    wrist_cam_1 = np.repeat(wrist_cam_1, repeats=21, axis=0)  # shape: (21, 3)
+
+    lmks_input_cam_1 = np.concatenate([lmks_input_cam_1, index_cam_1, middle_cam_1, wrist_cam_1], axis=1)  # shape: (21, 12)
+
+    index_cam_2 = np.repeat(index_cam_2, repeats=21, axis=0)  # shape: (21, 3)
+    middle_cam_2 = np.repeat(middle_cam_2, repeats=21, axis=0)  # shape: (21, 3)
+    wrist_cam_2 = np.repeat(wrist_cam_2, repeats=21, axis=0)  # shape: (21, 3)
+
+    lmks_input_cam_2 = np.concatenate([lmks_input_cam_2, index_cam_2, middle_cam_2, wrist_cam_2], axis=1)  # shape: (21, 12)
+
+    lmks_input = np.concatenate([lmks_input_cam_1, lmks_input_cam_2], axis=1)  # shape: (21, 24)
+
+    return lmks_input
+    

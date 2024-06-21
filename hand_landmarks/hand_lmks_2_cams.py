@@ -25,12 +25,13 @@ from hand_landmarks.tools import (detect_hand_landmarks,
                                   get_oak_2_rs_matrix,
                                   xyZ_to_XYZ, 
                                   load_config,
-                                  transform_to_another_coordinate)
+                                  transform_to_another_coordinate,
+                                  transform_to_mlp_v3)
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from hand_landmarks.stream_w_open3d import visualization_thread
 from hand_landmarks.write_lmks_to_file import write_lnmks_to_file
 from hand_landmarks.angle_calculation import get_angles_of_hand_joints
-from hand_landmarks.neural_networks.mlp import MLP
+from hand_landmarks.neural_networks.mlp import MLP, MLP_v2, MLP_v3
 
 config_file_path = os.path.join(CURRENT_DIR, "configurations/hand_landmarks.yaml") 
 config = load_config(config_file_path)
@@ -161,7 +162,9 @@ if __name__ == "__main__":
         scaler_input_path = config["neural_network"]["scaler_input_path"]
         scaler_output_path = config["neural_network"]["scaler_output_path"]
 
-        model = MLP()
+        #model = MLP()
+        model = MLP_v2()
+        #model = MLP_v3()
         model.load_state_dict(torch.load(model_weight_path))
         model.eval()
         model.to(device)
@@ -246,10 +249,14 @@ if __name__ == "__main__":
                 lmks_input = np.concatenate([raw_XYZ_of_opposite_cam, 
                                                 raw_XYZ_of_right_side_cam_in_opposite_cam], axis=0)  # shape: (42, 3)
                 lmks_input = lmks_input.flatten()[None, :]  # shape: (1, 126)
+
+                # Change input for MLP_v3
+                #lmks_input = transform_to_mlp_v3(lmks_input)  # shape: (21, 24)
+
                 lmks_input = scaler_input.transform(lmks_input)
                 lmks_input = torch.tensor(lmks_input, dtype=torch.float32).to(device)
 
-                lmks_output = model(lmks_input)  # shape: (1, 63)
+                lmks_output = model(lmks_input)  # shape: (21, 3)
                 lmks_output = lmks_output.detach().to("cpu").numpy()
                 lmks_output = scaler_output.inverse_transform(lmks_output)
                 lmks_output = lmks_output[0]  # shape: (63,)
