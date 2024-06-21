@@ -244,12 +244,12 @@ if __name__ == "__main__":
             # 4. Calculate angles
             angles = get_angles_between_joints(XYZ_wrt_shoulder, landmarks_name_want_to_get)
 
-            print("-----")
-            count += 1
-            print("count: ", count)
-            print("XYZ_wrt_shoulder: ", XYZ_wrt_shoulder)
-            if count == 60:
-                break
+            #print("-----")
+            #count += 1
+            #print("count: ", count)
+            #print("XYZ_wrt_shoulder: ", XYZ_wrt_shoulder)
+            #if count == 60:
+                #break
 
             # 5. Plot (optional)
             if plot_3d:

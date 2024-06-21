@@ -58,7 +58,7 @@ def get_angles_between_joints(XYZ_landmarks, landmark_dictionary):
     #ref = c[1] + 1e-9
     #signs = ref / np.absolute(ref)
 
-    #print("angle: ", angle)
+    print("angle: ", angle)
     
     return angle
 

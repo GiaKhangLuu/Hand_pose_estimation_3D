@@ -19,7 +19,7 @@ mediapipe:
   is_activated: true
   min_detection_confidence: 0.4
   min_tracking_confidence: 0.4
-  model_complexity: 0
+  model_complexity: 1
   visibility_threshold: 0.2
 
 pose_landmarks:
