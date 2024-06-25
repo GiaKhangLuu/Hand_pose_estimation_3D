@@ -1,5 +1,5 @@
-frame_width: 1280
-frame_height: 720
+frame_width: 640
+frame_height: 360
 
 sliding_window_size: 12 # Diameter of each pixel neighborhood
 sigma_color: 25         # Filter sigma in the color space for bilateral
@@ -21,6 +21,7 @@ mediapipe:
   min_tracking_confidence: 0.5
   visibility_threshold: 0.2
   num_pose: 1
+  model_complexity: 1
   model_asset_path: /home/giakhang/Downloads/pose_landmarker_full.task
 
 pose_landmarks:

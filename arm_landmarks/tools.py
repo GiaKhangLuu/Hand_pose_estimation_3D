@@ -14,6 +14,9 @@ def detect_arm_landmarks(color_img, detector, landmarks_queue, mp_drawing, mp_po
 
     results = detector.process(color_img)
 
+    print('--------------')
+    print(results.pose_landmarks)
+
     if results.pose_landmarks:
         mp_drawing.draw_landmarks(color_img, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
                                   mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
