@@ -3,11 +3,11 @@ import pyrealsense2 as rs
 import numpy as np
 import cv2
 
-def initialize_realsense_cam(window_size):
+def initialize_realsense_cam(rgb_size, depth_size):
     pipeline_rs = rs.pipeline()
     config_rs = rs.config()
-    config_rs.enable_stream(rs.stream.color, window_size[0], window_size[1], rs.format.bgr8, 30)
-    config_rs.enable_stream(rs.stream.depth, window_size[0], window_size[1], rs.format.z16, 30)
+    config_rs.enable_stream(rs.stream.color, rgb_size[0], rgb_size[1], rs.format.bgr8, 30)
+    config_rs.enable_stream(rs.stream.depth, depth_size[0], depth_size[1], rs.format.z16, 30)
 
     # Start streaming
     pipeline_rs.start(config_rs)
@@ -15,7 +15,7 @@ def initialize_realsense_cam(window_size):
 
     return pipeline_rs, rsalign
 
-def initialize_oak_cam(window_size):
+def initialize_oak_cam(stereo_size):
     pipeline_oak = dai.Pipeline()
 
     cam_rgb = pipeline_oak.create(dai.node.ColorCamera)
@@ -28,17 +28,13 @@ def initialize_oak_cam(window_size):
     stereo = pipeline_oak.create(dai.node.StereoDepth)
 
     stereo.setDepthAlign(dai.CameraBoardSocket.RGB)
-    stereo.setOutputSize(window_size[0], window_size[1])
+    stereo.setOutputSize(stereo_size[0], stereo_size[1])
 
     mono_left.setBoardSocket(dai.CameraBoardSocket.LEFT)
     mono_right.setBoardSocket(dai.CameraBoardSocket.RIGHT)
 
-    if window_size == (640, 360):
-        mono_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
-        mono_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
-    else:
-        mono_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
-        mono_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
+    mono_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+    mono_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
 
     stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
     mono_left.out.link(stereo.left)
@@ -69,7 +65,7 @@ def stream_rs(pipeline_rs, rsalign, rs_frame_queue):
         if rs_frame_queue.qsize() > 1:
             rs_frame_queue.get()
 
-def stream_oak(pipeline_oak, window_size, oak_frame_queue):
+def stream_oak(pipeline_oak, oak_frame_queue):
     device_oak = dai.Device(pipeline_oak)
     rgb_queue_oak = device_oak.getOutputQueue(name="rgb", maxSize=2, blocking=False)
     depth_queue_oak = device_oak.getOutputQueue(name="depth", maxSize=2, blocking=False)
@@ -80,9 +76,6 @@ def stream_oak(pipeline_oak, window_size, oak_frame_queue):
 
         frame_oak = rgb_frame_oak.getCvFrame()
         depth_oak = depth_frame_oak.getFrame()
-        depth_oak = depth_oak.astype(np.float32)
-
-        frame_oak = cv2.resize(frame_oak, window_size)
 
         oak_frame_queue.put((frame_oak, depth_oak))
 

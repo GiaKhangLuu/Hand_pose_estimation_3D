@@ -45,20 +45,20 @@ def get_angles_between_joints(XYZ_landmarks, landmark_dictionary):
     # ---------------------
 
     # Joint 3
-    #a = np.array([0, 1, 0])
-    #b = XYZ_landmarks[landmark_dictionary.index("left wrist")] - XYZ_landmarks[landmark_dictionary.index("left elbow")]
-    #b = b * [0, 1, 1]
-    #dot = np.sum(a * b)
-    #a_norm = np.linalg.norm(a)
-    #b_norm = np.linalg.norm(b)
-    #cos = dot / (a_norm * b_norm)
-    #angle = np.degrees(np.arccos(cos))
+    a = np.array([0, 1, 0])
+    b = XYZ_landmarks[landmark_dictionary.index("left wrist")] - XYZ_landmarks[landmark_dictionary.index("left elbow")]
+    b = b * [0, 1, 1]
+    dot = np.sum(a * b)
+    a_norm = np.linalg.norm(a)
+    b_norm = np.linalg.norm(b)
+    cos = dot / (a_norm * b_norm)
+    angle = np.degrees(np.arccos(cos))
 
-    #c = np.cross(b, a)
-    #ref = c[0] + 1e-9
-    #signs = ref / np.absolute(ref)
+    c = np.cross(b, a)
+    ref = c[0] + 1e-9
+    signs = ref / np.absolute(ref)
 
-    #angle *= signs
+    angle *= signs
 
     # -------------------
 
@@ -81,8 +81,16 @@ def get_angles_between_joints(XYZ_landmarks, landmark_dictionary):
     # --------------------
 
     # Joint 5
-    angle = 4
+    #a = np.array([0, 0, 1])
+    #b = XYZ_landmarks[landmark_dictionary.index("left pinky")] - XYZ_landmarks[landmark_dictionary.index("left index")]
+    #b = b * [1, 0, 1]
+    #dot = np.sum(a * b)
+    #a_norm = np.linalg.norm(a)
+    #b_norm = np.linalg.norm(b)
+    #cos = dot / (a_norm * b_norm)
+    #angle = np.degrees(np.arccos(cos))
 
+    #print("angle: ", angle)
     
     return angle
 

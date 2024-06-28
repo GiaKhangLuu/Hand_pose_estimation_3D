@@ -1,5 +1,19 @@
-frame_width: 640
-frame_height: 360
+realsense:
+  rgb:
+    width: 1280
+    height: 720
+  depth:
+    width: 640
+    height: 360
+
+oak:
+  stereo: 
+    width: 640
+    height: 360
+
+process_frame_size:
+  width: 960
+  height: 540
 
 sliding_window_size: 12 # Diameter of each pixel neighborhood
 sigma_color: 25         # Filter sigma in the color space for bilateral
@@ -8,8 +22,9 @@ sigma_space: 25         # Filter sigma in the coordinate space for bilateral
 arm_to_get: left
 
 utilities:
+  draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
 
 camera:
   rightside_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/oak_calibration.npz
@@ -21,8 +36,7 @@ mediapipe:
   min_tracking_confidence: 0.5
   visibility_threshold: 0.2
   num_pose: 1
-  model_complexity: 1
-  model_asset_path: /home/giakhang/Downloads/pose_landmarker_full.task
+  model_asset_path: /home/giakhang/Downloads/pose_landmarker_lite.task
 
 pose_landmarks:
   - nose

@@ -1,32 +1,77 @@
 import yaml
 import cv2
 import numpy as np
+import mediapipe as mp
 from functools import partial
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.distance import euclidean
 
 from numpy.typing import NDArray
-from typing import Tuple
+from typing import Tuple, List
 
-def detect_arm_landmarks(color_img, detector, landmarks_queue, mp_drawing, mp_pose):
-    color_img = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
+from mediapipe import solutions
+from mediapipe.framework.formats import landmark_pb2
+import numpy as np
 
-    results = detector.process(color_img)
+#def mediapipe_arm_landmark_detection_result_callback(result: mp.tasks.vision.PoseLandmarkerResult, 
+                                                     #output_image: mp.Image, 
+                                                     #timestamp_ms: int,
+                                                     #landmarks_queue,
+                                                     #is_print=False):
+    ###if is_print:
+        ###print("Timestamp after detecting: ", timestamp_ms)
+    #if result.pose_landmarks:
+        #landmarks_queue.put((result, output_image, timestamp_ms))
+        #if landmarks_queue.qsize() > 1:
+            #landmarks_queue.get()
 
-    print('--------------')
-    print(results.pose_landmarks)
+def get_normalized_pose_landmarks(detection_result):
+    pose_landmarks_list = detection_result.pose_landmarks
+    pose_landmarks_proto_list = []
+    pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
 
-    if results.pose_landmarks:
-        mp_drawing.draw_landmarks(color_img, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
-                                  mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
-                                  mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2))
-        landmarks_queue.put(results.pose_landmarks)
+    # Loop through the detected poses to visualize.
+    for idx in range(len(pose_landmarks_list)):
+        pose_landmarks = pose_landmarks_list[idx]
+
+        pose_landmarks_proto.landmark.extend([
+            landmark_pb2.NormalizedLandmark(x=landmark.x, 
+                                            y=landmark.y, 
+                                            z=landmark.z,
+                                            visibility=landmark.visibility) 
+                                            for landmark in pose_landmarks
+        ])
+        pose_landmarks_proto_list.append(pose_landmarks_proto)
+
+    return pose_landmarks_proto_list
+
+def draw_landmarks_on_image(rgb_image, 
+                            pose_landmarks_proto_list: List[landmark_pb2.NormalizedLandmarkList]):
+  annotated_image = np.copy(rgb_image)
+
+  # Loop through the detected poses to visualize.
+  for pose_landmarks_proto in pose_landmarks_proto_list:
+    solutions.drawing_utils.draw_landmarks(
+      annotated_image,
+      pose_landmarks_proto,
+      solutions.pose.POSE_CONNECTIONS,
+      solutions.drawing_styles.get_default_pose_landmarks_style())
+  return annotated_image
+
+def detect_arm_landmarks(color_img, detector, landmarks_queue, image_format="bgr"):
+    processed_image = np.copy(color_img)
+    if image_format == "bgr":
+        processed_image = cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_image)
+
+    #detector.detect_async(mp_image, timestamp)
+
+    detect_result = detector.detect(mp_image)
+    if detect_result.pose_landmarks:
+        landmarks_queue.put(detect_result)
         if landmarks_queue.qsize() > 1:
             landmarks_queue.get()
-
-    color_img = cv2.cvtColor(color_img, cv2.COLOR_BGR2RGB)
-    return color_img
 
 def load_config(file_path):
     with open(file_path, 'r') as file:
@@ -89,7 +134,6 @@ def get_xyZ(landmarks, depth, frame_size, sliding_window_size, landmark_ids_to_g
         landmark_ids_to_get = [landmark_ids_to_get]
 
     xyz = []
-
     if landmark_ids_to_get is None:
         for landmark in landmarks.landmark:
             if landmark.visibility > visibility_threshold: 
@@ -105,6 +149,8 @@ def get_xyZ(landmarks, depth, frame_size, sliding_window_size, landmark_ids_to_g
                 y = landmark.y
                 z = landmark.z
                 xyz.append([x, y, z])
+    if not len(xyz):
+        return None
 
     xyz = np.array(xyz)
     xy_unnorm = unnormalize(xyz, frame_size)
