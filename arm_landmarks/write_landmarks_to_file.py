@@ -60,7 +60,7 @@ def write_lnmks_to_file(lmks_queue):
 
     # --------------- Save to .npz to run offline -------------------
     np.savez(des_path, 
-             fused_lanmarks=fused_landmarks)
+             fused_landmarks=fused_landmarks)
 
     # --------------- Save to .csv to train model -------------------
 
