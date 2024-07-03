@@ -265,7 +265,7 @@ if __name__ == "__main__":
                     len(opposite_arm_xyZ) != len(rightside_arm_xyZ) or 
                     len(opposite_arm_xyZ) == 0 or
                     len(rightside_arm_xyZ) == 0):
-                    cv2.imshow("Frame", frame_of_two_cam)
+                    #cv2.imshow("Frame", frame_of_two_cam)
                     continue
 
                 # 2. Fusing landmarks of two cameras
@@ -275,7 +275,7 @@ if __name__ == "__main__":
                                                             oak_2_rs_mat_avg) 
 
                 if fused_XYZ.shape[0] != len(landmarks_name_want_to_get):
-                    cv2.imshow("Frame", frame_of_two_cam)
+                    #cv2.imshow("Frame", frame_of_two_cam)
                     continue
 
                 # 3. Convert to shoulder coord
@@ -315,3 +315,5 @@ if __name__ == "__main__":
             cv2.destroyAllWindows()
             pipeline_rs.stop()
             break
+
+        time.sleep(0.5)

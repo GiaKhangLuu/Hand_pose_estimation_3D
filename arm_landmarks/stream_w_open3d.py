@@ -4,7 +4,7 @@ import threading
 import queue
 import time
 import random
-
+from scipy.spatial.transform import Rotation as R
 #my_queue = queue.Queue()
 
 def visualization_thread(lmks_queue, draw_xyz=True):
@@ -41,9 +41,37 @@ def visualization_thread(lmks_queue, draw_xyz=True):
             colors = [[0, 0, 0] for i in range(len(lines))]
 
             if draw_xyz:
-                pts = np.concatenate([pts, [[20, 0, 0], [0, 20, 0], [0, 0, 20]]], axis=0)
-                lines.extend([[0, 9], [0, 10], [0, 11]])
-                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                #pts = np.concatenate([pts, [[20, 0, 0], [0, 20, 0], [0, 0, 20]]], axis=0)
+                #lines.extend([[0, 9], [0, 10], [0, 11]])
+                #colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+                # Debugging calculating joint 3, will remove the following lines after finishing
+                landmark_dictionary = ["left shoulder", "left elbow", "left wrist",
+                                       "left pinky", "left index", "left thumb", "left hip",
+                                       "right shoulder", "right hip"]
+                angle_2 = cal_angle2(pts)
+                rot_mat = R.from_euler("y", angle_2, degrees=True).as_matrix()
+                z_new = np.matmul(rot_mat, [0, 0, 1])
+                y_new = pts[landmark_dictionary.index("left elbow")]
+                x_new = np.cross(y_new, z_new)
+
+                x_new = x_new / np.linalg.norm(x_new)
+                y_new = y_new / np.linalg.norm(y_new)
+                z_new = z_new / np.linalg.norm(z_new)
+
+                trans_mat = np.array([x_new, y_new, z_new])
+                trans_mat_inv = np.linalg.inv(trans_mat)
+
+                b = pts[landmark_dictionary.index("left wrist")] - pts[landmark_dictionary.index("left elbow")]
+                b_prime = np.matmul(trans_mat_inv, b)
+                b_prime_proj = b_prime * [1, 1, 0]
+
+                b_prime_in_world_to_plot = np.matmul(trans_mat, b_prime)
+                b_prime_proj_in_world_to_plot = np.matmul(trans_mat, b_prime_proj)
+
+                pts = np.concatenate([pts, [b_prime_in_world_to_plot, b_prime_proj_in_world_to_plot]], axis=0)
+                lines.extend([[0, 9], [0, 10]])
+                colors.extend([[0, 0, 1], [1, 0, 0]])
 
             pcd.points = o3d.utility.Vector3dVector(pts)
             line_set.points = o3d.utility.Vector3dVector(pts)  # Update the points
@@ -59,6 +87,23 @@ def visualization_thread(lmks_queue, draw_xyz=True):
         time.sleep(0.01)
 
     vis.destroy_window()
+
+def cal_angle2(XYZ_landmarks):
+    a = np.array([1, 0, 0])
+    b = XYZ_landmarks[1]
+    b = b * [1, 0, 1]
+
+    dot = np.sum(a * b)
+    a_norm = np.linalg.norm(a)
+    b_norm = np.linalg.norm(b)
+    cos = dot / (a_norm * b_norm)
+    angle = np.degrees(np.arccos(cos))
+    angle = 180 - angle
+    c = np.cross(b, a)
+    ref = c[1] + 1e-9
+    signs = ref / np.absolute(ref)
+    angle *= signs
+    return angle
 
 def add_to_queue(my_queue):
     random_number = random.random()
