@@ -49,8 +49,10 @@ def visualization_thread(lmks_queue, draw_xyz=True):
                 landmark_dictionary = ["left shoulder", "left elbow", "left wrist",
                                        "left pinky", "left index", "left thumb", "left hip",
                                        "right shoulder", "right hip"]
+                angle_1 = calculate_angle_j1(pts)
                 angle_2 = cal_angle2(pts)
-                rot_mat = R.from_euler("y", angle_2, degrees=True).as_matrix()
+                rot_mat = R.from_euler("yz", [angle_2, angle_1], degrees=True).as_matrix()
+
                 z_new = np.matmul(rot_mat, [0, 0, 1])
                 y_new = pts[landmark_dictionary.index("left elbow")]
                 x_new = np.cross(y_new, z_new)
@@ -60,18 +62,22 @@ def visualization_thread(lmks_queue, draw_xyz=True):
                 z_new = z_new / np.linalg.norm(z_new)
 
                 trans_mat = np.array([x_new, y_new, z_new])
+                trans_mat = np.transpose(trans_mat)
                 trans_mat_inv = np.linalg.inv(trans_mat)
 
                 b = pts[landmark_dictionary.index("left wrist")] - pts[landmark_dictionary.index("left elbow")]
-                b_prime = np.matmul(trans_mat_inv, b)
+                b_prime = np.matmul(trans_mat_inv, b.T)
+                b_prime = b_prime.T
                 b_prime_proj = b_prime * [1, 1, 0]
 
-                b_prime_in_world_to_plot = np.matmul(trans_mat, b_prime)
-                b_prime_proj_in_world_to_plot = np.matmul(trans_mat, b_prime_proj)
+                b_prime_in_world_to_plot = np.matmul(trans_mat, b_prime.T)
+                b_prime_in_world_to_plot = b_prime_in_world_to_plot.T
+                b_prime_proj_in_world_to_plot = np.matmul(trans_mat, b_prime_proj.T)
+                b_prime_proj_in_world_to_plot = b_prime_proj_in_world_to_plot.T
 
-                pts = np.concatenate([pts, [b_prime_in_world_to_plot, b_prime_proj_in_world_to_plot]], axis=0)
-                lines.extend([[0, 9], [0, 10]])
-                colors.extend([[0, 0, 1], [1, 0, 0]])
+                pts = np.concatenate([pts, [b_prime_in_world_to_plot, b_prime_proj_in_world_to_plot, z_new * 20]], axis=0)
+                lines.extend([[0, 9], [0, 10], [0, 11]])
+                colors.extend([[0, 0, 1], [1, 0, 0], [0, 1, 0]])
 
             pcd.points = o3d.utility.Vector3dVector(pts)
             line_set.points = o3d.utility.Vector3dVector(pts)  # Update the points
@@ -104,6 +110,27 @@ def cal_angle2(XYZ_landmarks):
     signs = ref / np.absolute(ref)
     angle *= signs
     return angle
+
+def calculate_angle_j1(XYZ_landmarks):
+    a = np.array([1, 0, 0])
+    b = XYZ_landmarks[1]
+    b = b * [1, 1, 0]
+
+    dot = np.sum(a * b)
+    a_norm = np.linalg.norm(a)
+    b_norm = np.linalg.norm(b)
+    cos = dot / (a_norm * b_norm)
+    angle_j1 = np.degrees(np.arccos(cos))
+
+    angle_j1 = 180 - angle_j1
+
+    c = np.cross(b, a)
+    ref = c[-1] + 1e-9
+    signs = ref / np.absolute(ref)
+
+    angle_j1 *= signs
+
+    return angle_j1
 
 def add_to_queue(my_queue):
     random_number = random.random()
