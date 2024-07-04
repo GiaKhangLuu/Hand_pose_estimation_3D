@@ -26,6 +26,24 @@ utilities:
   plot_3d: true              # Plot the hand landmarks on open3d
   save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
 
+debugging_mode:                       # In debugging mode, we set the time sleep to reduce noise when plotting in open3d
+  is_activated: true                  
+  time_sleep: 0.5
+  draw_xyz: false                     # Draw origin (x, y, z)
+  show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+  show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
+  show_left_arm_angle_j3: false        # Plotting left arm joint 3 and its reference vector to debug (visualize)
+  show_left_arm_angle_j4: true       # Plotting left arm joint 4 and its reference vector to debug (visualize)
+  show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
+  ref_vector_color: 
+    - 1
+    - 0
+    - 0
+  joint_vector_color: 
+    - 0
+    - 0
+    - 1
+
 camera:
   rightside_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/oak_calibration.npz
   opposite_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/rs_calibration.npz

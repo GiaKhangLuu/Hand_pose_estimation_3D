@@ -1,13 +1,32 @@
+import sys
+import os
+
+CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(CURRENT_DIR, '..'))
+
 import numpy as np
 import open3d as o3d
 import threading
 import queue
 import time
 import random
-from scipy.spatial.transform import Rotation as R
-#my_queue = queue.Queue()
 
-def visualization_thread(lmks_queue, draw_xyz=True):
+from arm_landmarks.angle_calculation import (calculate_angle_j1,
+                                             calculate_angle_j2,
+                                             calculate_angle_j3,
+                                             calculate_angle_j4,
+                                             calculate_rotation_matrix_to_compute_angle_of_j3_and_j4)
+
+def visualization_thread(lmks_queue, 
+                         landmark_dictionary,
+                         show_left_arm_j1=False,
+                         show_left_arm_j2=False,
+                         show_left_arm_j3=False,
+                         show_left_arm_j4=False,
+                         show_left_arm_j5=False,
+                         draw_xyz=False,
+                         joint_vector_color=None,
+                         ref_vector_color=None):
     x = np.array([[0, 0, 0],
                   [500, 0, 0],
                   [0, 500, 0],
@@ -31,53 +50,46 @@ def visualization_thread(lmks_queue, draw_xyz=True):
     # Main loop
     while True:
         if not lmks_queue.empty():
-            #wrist, finger_lmks = lmks_queue.get()
-            #finger_lmks = np.reshape(finger_lmks, (-1, 3))
-            #pts = np.vstack((wrist[None, :], finger_lmks))
             pts = lmks_queue.get()
             lines = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 5], [3, 4],
                      [0, 6], [0, 7],
                      [6, 8], [7, 8]]
             colors = [[0, 0, 0] for i in range(len(lines))]
 
-            if draw_xyz:
-                #pts = np.concatenate([pts, [[20, 0, 0], [0, 20, 0], [0, 0, 20]]], axis=0)
-                #lines.extend([[0, 9], [0, 10], [0, 11]])
-                #colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-
-                # Debugging calculating joint 3, will remove the following lines after finishing
-                landmark_dictionary = ["left shoulder", "left elbow", "left wrist",
-                                       "left pinky", "left index", "left thumb", "left hip",
-                                       "right shoulder", "right hip"]
-                angle_1 = calculate_angle_j1(pts)
-                angle_2 = cal_angle2(pts)
-                rot_mat = R.from_euler("yz", [angle_2, angle_1], degrees=True).as_matrix()
-
-                z_new = np.matmul(rot_mat, [0, 0, 1])
-                y_new = pts[landmark_dictionary.index("left elbow")]
-                x_new = np.cross(y_new, z_new)
-
-                x_new = x_new / np.linalg.norm(x_new)
-                y_new = y_new / np.linalg.norm(y_new)
-                z_new = z_new / np.linalg.norm(z_new)
-
-                trans_mat = np.array([x_new, y_new, z_new])
-                trans_mat = np.transpose(trans_mat)
-                trans_mat_inv = np.linalg.inv(trans_mat)
-
-                b = pts[landmark_dictionary.index("left wrist")] - pts[landmark_dictionary.index("left elbow")]
-                b_prime = np.matmul(trans_mat_inv, b.T)
-                b_prime = b_prime.T
-                b_prime_proj = b_prime * [1, 1, 0]
+            if show_left_arm_j3:  # Debugging calculating joint 3
+                _, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
+                _, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
+                trans_mat, trans_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
+                b_prime_proj, b_prime, _ = calculate_angle_j3(pts, trans_mat_inv, landmark_dictionary)
 
                 b_prime_in_world_to_plot = np.matmul(trans_mat, b_prime.T)
                 b_prime_in_world_to_plot = b_prime_in_world_to_plot.T
                 b_prime_proj_in_world_to_plot = np.matmul(trans_mat, b_prime_proj.T)
                 b_prime_proj_in_world_to_plot = b_prime_proj_in_world_to_plot.T
 
-                pts = np.concatenate([pts, [b_prime_in_world_to_plot, b_prime_proj_in_world_to_plot, z_new * 20]], axis=0)
+                pts = np.concatenate([pts, [b_prime_in_world_to_plot, b_prime_proj_in_world_to_plot]], axis=0)
+                lines.extend([[0, 9], [0, 10]])
+                colors.extend([joint_vector_color, ref_vector_color])
+
+            if show_left_arm_j4: # Debugging calculating joint 4
+                _, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
+                _, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
+                trans_mat, trans_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
+                a, b, _ = calculate_angle_j4(pts, trans_mat, trans_mat_inv, landmark_dictionary)
+
+                b_in_original_coor = np.matmul(trans_mat, b.T)
+                b_in_original_coor = b_in_original_coor.T
+                a_in_original_coor = np.matmul(trans_mat, a.T)
+                a_in_original_coor = a_in_original_coor.T
+
+                pts = np.concatenate([pts, [b_in_original_coor, a_in_original_coor * 20]], axis=0)
+                lines.extend([[0, 9], [0, 10]])
+                colors.extend([joint_vector_color, ref_vector_color])
+
+            if draw_xyz:
+                pts = np.concatenate([pts, [[20, 0, 0], [0, 20, 0], [0, 0, 20]]], axis=0)
                 lines.extend([[0, 9], [0, 10], [0, 11]])
-                colors.extend([[0, 0, 1], [1, 0, 0], [0, 1, 0]])
+                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
             pcd.points = o3d.utility.Vector3dVector(pts)
             line_set.points = o3d.utility.Vector3dVector(pts)  # Update the points
@@ -90,47 +102,9 @@ def visualization_thread(lmks_queue, draw_xyz=True):
         vis.poll_events()
         vis.update_renderer()        
 
-        time.sleep(0.01)
+        time.sleep(0.1)  # Set time sleep here is importance, the higher time.sleep parameter is (unit is second), the faster the main thread can process
 
     vis.destroy_window()
-
-def cal_angle2(XYZ_landmarks):
-    a = np.array([1, 0, 0])
-    b = XYZ_landmarks[1]
-    b = b * [1, 0, 1]
-
-    dot = np.sum(a * b)
-    a_norm = np.linalg.norm(a)
-    b_norm = np.linalg.norm(b)
-    cos = dot / (a_norm * b_norm)
-    angle = np.degrees(np.arccos(cos))
-    angle = 180 - angle
-    c = np.cross(b, a)
-    ref = c[1] + 1e-9
-    signs = ref / np.absolute(ref)
-    angle *= signs
-    return angle
-
-def calculate_angle_j1(XYZ_landmarks):
-    a = np.array([1, 0, 0])
-    b = XYZ_landmarks[1]
-    b = b * [1, 1, 0]
-
-    dot = np.sum(a * b)
-    a_norm = np.linalg.norm(a)
-    b_norm = np.linalg.norm(b)
-    cos = dot / (a_norm * b_norm)
-    angle_j1 = np.degrees(np.arccos(cos))
-
-    angle_j1 = 180 - angle_j1
-
-    c = np.cross(b, a)
-    ref = c[-1] + 1e-9
-    signs = ref / np.absolute(ref)
-
-    angle_j1 *= signs
-
-    return angle_j1
 
 def add_to_queue(my_queue):
     random_number = random.random()

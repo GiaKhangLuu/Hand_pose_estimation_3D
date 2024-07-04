@@ -32,6 +32,7 @@ from arm_landmarks.tools import (detect_arm_landmarks,
 from arm_landmarks.write_landmarks_to_file import write_lnmks_to_file
 from arm_landmarks.angle_calculation import get_angles_between_joints
 
+# ------------------- READ CONFIG ------------------- 
 config_file_path = os.path.join(CURRENT_DIR, "configurations/arm_landmarks.yaml") 
 config = load_config(config_file_path)
 
@@ -63,6 +64,17 @@ arm_to_get = config["arm_to_get"]
 plot_3d = config["utilities"]["plot_3d"]
 is_draw_landmarks = config["utilities"]["draw_landmarks"]
 save_landmarks = config["utilities"]["save_landmarks"]
+
+is_debug = config["debugging_mode"]["is_activated"]
+time_sleep = config["debugging_mode"]["time_sleep"] if is_debug else 0.0000001
+draw_xyz = config["debugging_mode"]["draw_xyz"]
+is_debug_angle_j1 = config["debugging_mode"]["show_left_arm_angle_j1"]
+is_debug_angle_j2 = config["debugging_mode"]["show_left_arm_angle_j2"]
+is_debug_angle_j3 = config["debugging_mode"]["show_left_arm_angle_j3"]
+is_debug_angle_j4 = config["debugging_mode"]["show_left_arm_angle_j4"]
+is_debug_angle_j5 = config["debugging_mode"]["show_left_arm_angle_j5"]
+ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
+joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
 opposite_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (rgb, depth) from REALSENSE camera
 rightside_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (rgb, depth) from OAK camera
@@ -140,16 +152,6 @@ def get_frame(opposite_frame_queue,
         opposite_depth = filter_depth(opposite_depth, sliding_window_size, sigma_color, sigma_space)
         rightside_depth = filter_depth(rightside_depth, sliding_window_size, sigma_color, sigma_space)
 
-        if is_detected:
-            detect_arm_landmarks(opposite_rgb, 
-                                 opposite_landmarks_detector, 
-                                 opposite_landmarks_queue,             
-                                 image_format="bgr")
-            detect_arm_landmarks(rightside_rgb, 
-                                 right_side_landmarks_detector,
-                                 rightside_landmarks_queue,                  
-                                 image_format="bgr")
-
         opposite_streamed_frame_queue.put((opposite_rgb,
                                            opposite_depth))
         rightside_streamed_frame_queue.put((rightside_rgb,
@@ -160,10 +162,23 @@ def get_frame(opposite_frame_queue,
 
         if rightside_streamed_frame_queue.qsize() > 1:
             rightside_streamed_frame_queue.get()
+
+        if is_detected:
+            detect_arm_landmarks(opposite_rgb, 
+                                 opposite_landmarks_detector, 
+                                 opposite_landmarks_queue,             
+                                 image_format="bgr")
+            detect_arm_landmarks(rightside_rgb, 
+                                 right_side_landmarks_detector,
+                                 rightside_landmarks_queue,                  
+                                 image_format="bgr")
         
 if __name__ == "__main__":
     pipeline_rs, rsalign = initialize_realsense_cam(realsense_rgb_size, realsense_depth_size)
     pipeline_oak = initialize_oak_cam(oak_stereo_size)
+
+    landmarks_name_want_to_get = get_landmarks_name_based_on_arm(arm_to_get)
+    landmarks_id_want_to_get = [pose_landmark_names.index(name) for name in landmarks_name_want_to_get]
 
     rs_thread = threading.Thread(target=stream_rs, args=(pipeline_rs, rsalign, 
                                                         opposite_frame_getter_queue,), daemon=True)
@@ -181,13 +196,19 @@ if __name__ == "__main__":
                                                              rightside_arm_landmarks_queue,
                                                              is_activated,), daemon=True)  
 
-    vis_thread = threading.Thread(target=visualization_thread, args=(visualization_queue,), daemon=True)
+    vis_thread = threading.Thread(target=visualization_thread, args=(visualization_queue,
+                                                                     landmarks_name_want_to_get,
+                                                                     is_debug_angle_j1,
+                                                                     is_debug_angle_j2,
+                                                                     is_debug_angle_j3,
+                                                                     is_debug_angle_j4,
+                                                                     is_debug_angle_j5,
+                                                                     draw_xyz,
+                                                                     joint_vector_color,
+                                                                     ref_vector_color), 
+                                                                     daemon=True)
 
     write_to_file_thread = threading.Thread(target=write_lnmks_to_file, args=(write_queue,), daemon=True)
-
-    frame_count = 0
-    start_time = time.time()
-    fps = 0
 
     rs_thread.start()
     oak_thread.start()
@@ -195,27 +216,11 @@ if __name__ == "__main__":
     vis_thread.start()
     write_to_file_thread.start()
 
+    frame_count = 0
+    start_time = time.time()
+    fps = 0
+
     while True:
-        #if (not opposite_arm_landmarks_queue.empty() and
-            #not rightside_arm_landmarks_queue.empty()):
-
-            #opposite_result, opposite_rgb, oppo_timestamp = opposite_arm_landmarks_queue.get()
-            #rightside_result, rightside_rgb, rightside_timestamp = rightside_arm_landmarks_queue.get()
-
-            #print("oppo_timestamp: ", oppo_timestamp)
-            #print("rightside_timestamp: ", rightside_timestamp)
-            
-
-            #opposite_rgb = opposite_rgb.numpy_view()[..., ::-1]
-            #rightside_rgb = rightside_rgb.numpy_view()[..., ::-1]
-
-            #opposite_arm_landmarks = get_normalized_pose_landmarks(opposite_result)
-            #rightside_arm_landmarks = get_normalized_pose_landmarks(rightside_result)
-
-            #if is_draw_landmarks:
-                #opposite_rgb = draw_landmarks_on_image(opposite_rgb, opposite_arm_landmarks)
-                #rightside_rgb = draw_landmarks_on_image(rightside_rgb, rightside_arm_landmarks)
-
         if (not opposite_streamed_frame_queue.empty() and
             not rightside_streamed_frame_queue.empty()):
         
@@ -242,8 +247,6 @@ if __name__ == "__main__":
                     opposite_arm_landmarks = opposite_arm_landmarks[0]                                             
                     rightside_arm_landmarks = rightside_arm_landmarks[0] 
 
-                landmarks_name_want_to_get = get_landmarks_name_based_on_arm(arm_to_get)
-                landmarks_id_want_to_get = [pose_landmark_names.index(name) for name in landmarks_name_want_to_get]
 
                 opposite_arm_xyZ = get_xyZ(opposite_arm_landmarks, 
                                            opposite_depth, 
@@ -316,4 +319,4 @@ if __name__ == "__main__":
             pipeline_rs.stop()
             break
 
-        time.sleep(0.5)
+        time.sleep(time_sleep)
