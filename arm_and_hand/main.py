@@ -97,7 +97,7 @@ arm_base_options = python.BaseOptions(model_asset_path=arm_model_path,
     delegate=mp.tasks.BaseOptions.Delegate.GPU)
 arm_options = vision.PoseLandmarkerOptions(
     base_options=arm_base_options,
-    running_mode=mp.tasks.vision.RunningMode.IMAGE,
+    running_mode=mp.tasks.vision.RunningMode.VIDEO,
     num_poses=arm_num_pose_detected,
     min_pose_detection_confidence=arm_min_det_conf,
     min_tracking_confidence=arm_min_tracking_conf,
@@ -171,11 +171,6 @@ if __name__ == "__main__":
 
         time.sleep(0.005)
 
-        if not arm_landmark_detection_result_queue.empty():
-            rs_arm_landmarks_result, oak_arm_landmarks_result = arm_landmark_detection_result_queue.get()
-            opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks_result)
-            rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks_result)
-
         # 2.2. Detect hand landmarks
         hand_landmark_input_queue.put((np.copy(opposite_rgb), np.copy(rightside_rgb), timestamp))
         timestamp += 1
@@ -187,6 +182,11 @@ if __name__ == "__main__":
             rs_hand_landmarks_result, oak_hand_landmarks_result = hand_landmark_detection_result_queue.get()
             opposite_rgb = draw_hand_landmarks_on_image(opposite_rgb, rs_hand_landmarks_result)
             rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks_result)
+
+        if not arm_landmark_detection_result_queue.empty():
+            rs_arm_landmarks_result, oak_arm_landmarks_result = arm_landmark_detection_result_queue.get()
+            opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks_result)
+            rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks_result)
 
 
 

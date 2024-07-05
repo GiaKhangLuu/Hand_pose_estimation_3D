@@ -33,8 +33,8 @@ def detect_arm_landmarks(rs_detector, oak_detector, input_queue, result_queue, i
             mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
             mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
 
-            rs_result = rs_detector.detect(mp_rs_image)
-            oak_result = oak_detector.detect(mp_oak_image)
+            rs_result = rs_detector.detect_for_video(mp_rs_image, timestamp)
+            oak_result = oak_detector.detect_for_video(mp_oak_image, timestamp)
 
             if rs_result.pose_landmarks and oak_result.pose_landmarks:
                 result_queue.put((rs_result, oak_result))
