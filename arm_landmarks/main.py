@@ -152,6 +152,16 @@ def get_frame(opposite_frame_queue,
         opposite_depth = filter_depth(opposite_depth, sliding_window_size, sigma_color, sigma_space)
         rightside_depth = filter_depth(rightside_depth, sliding_window_size, sigma_color, sigma_space)
 
+        if is_detected:
+            detect_arm_landmarks(opposite_rgb, 
+                                 opposite_landmarks_detector, 
+                                 opposite_landmarks_queue,             
+                                 image_format="bgr")
+            detect_arm_landmarks(rightside_rgb, 
+                                 right_side_landmarks_detector,
+                                 rightside_landmarks_queue,                  
+                                 image_format="bgr")
+
         opposite_streamed_frame_queue.put((opposite_rgb,
                                            opposite_depth))
         rightside_streamed_frame_queue.put((rightside_rgb,
@@ -163,15 +173,6 @@ def get_frame(opposite_frame_queue,
         if rightside_streamed_frame_queue.qsize() > 1:
             rightside_streamed_frame_queue.get()
 
-        if is_detected:
-            detect_arm_landmarks(opposite_rgb, 
-                                 opposite_landmarks_detector, 
-                                 opposite_landmarks_queue,             
-                                 image_format="bgr")
-            detect_arm_landmarks(rightside_rgb, 
-                                 right_side_landmarks_detector,
-                                 rightside_landmarks_queue,                  
-                                 image_format="bgr")
         
 if __name__ == "__main__":
     pipeline_rs, rsalign = initialize_realsense_cam(realsense_rgb_size, realsense_depth_size)
@@ -268,7 +269,9 @@ if __name__ == "__main__":
                     len(opposite_arm_xyZ) != len(rightside_arm_xyZ) or 
                     len(opposite_arm_xyZ) == 0 or
                     len(rightside_arm_xyZ) == 0):
-                    #cv2.imshow("Frame", frame_of_two_cam)
+                    frame_of_two_cam = np.vstack([opposite_rgb, rightside_rgb])
+                    frame_of_two_cam = cv2.resize(frame_of_two_cam, (640, 720))
+                    cv2.imshow("Frame", frame_of_two_cam)
                     continue
 
                 # 2. Fusing landmarks of two cameras
@@ -278,7 +281,9 @@ if __name__ == "__main__":
                                                             oak_2_rs_mat_avg) 
 
                 if fused_XYZ.shape[0] != len(landmarks_name_want_to_get):
-                    #cv2.imshow("Frame", frame_of_two_cam)
+                    frame_of_two_cam = np.vstack([opposite_rgb, rightside_rgb])
+                    frame_of_two_cam = cv2.resize(frame_of_two_cam, (640, 720))
+                    cv2.imshow("Frame", frame_of_two_cam)
                     continue
 
                 # 3. Convert to shoulder coord
