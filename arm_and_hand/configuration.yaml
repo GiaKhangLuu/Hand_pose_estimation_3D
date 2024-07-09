@@ -15,9 +15,9 @@ camera:
 
 process_frame:
   frame_color_format: bgr
-  frame_size:
-    width: 640
-    height: 360
+  frame_size:  # the higher resolution is, the futher distance which is processed by the system
+    width: 960
+    height: 540
   depth_smoothing:
     sliding_window_size: 12          # Diameter of each pixel neighborhood
     sigma_color: 25                  # Filter sigma in the color space for bilateral
@@ -39,6 +39,28 @@ hand_landmark_detection:
   visibility_threshold: 0.2
   num_hand: 2
   model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/hand_landmarker.task
+  hand_landmarks:
+    - WRIST
+    - THUMB_CMC
+    - THUMB_MCP
+    - THUMB_IP
+    - THUMB_TIP
+    - INDEX_FINGER_MCP
+    - INDEX_FINGER_PIP
+    - INDEX_FINGER_DIP
+    - INDEX_FINGER_TIP
+    - MIDDLE_FINGER_MCP
+    - MIDDLE_FINGER_PIP
+    - MIDDLE_FINGER_DIP
+    - MIDDLE_FINGER_TIP
+    - RING_FINGER_MCP
+    - RING_FINGER_PIP
+    - RING_FINGER_DIP
+    - RING_FINGER_TIP
+    - PINKY_MCP
+    - PINKY_PIP
+    - PINKY_DIP
+    - PINKY_TIP
 
 arm_landmark_detection:
   is_enable: true
@@ -50,7 +72,7 @@ arm_landmark_detection:
   min_tracking_confidence: 0.5
   visibility_threshold: 0.2
   num_pose: 1
-  model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/pose_landmarker_lite.task
+  model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/pose_landmarker_full.task
   pose_landmarks:
     - nose
     - left eye (inner)

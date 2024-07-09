@@ -1,3 +1,9 @@
+"""
+Convention:
+    rs = opposite = REALSENSE camera
+    oak = rightside = OAK camera
+"""
+
 import sys
 import os
 
@@ -16,14 +22,22 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from mediapipe.framework.formats import landmark_pb2
 
+from stream_3d import visualize_arm, visualize_hand
 from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_on_image
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from utilities import (filter_depth,
     detect_hand_landmarks,
-    detect_arm_landmarks)
+    detect_arm_landmarks,
+    get_normalized_pose_landmarks,
+    get_normalized_hand_landmarks,
+    get_landmarks_name_based_on_arm,
+    fuse_landmarks_from_two_cameras,
+    convert_to_shoulder_coord,
+    convert_to_wrist_coord)
 from common import (load_data_from_npz_file,
     get_oak_2_rs_matrix,
-    load_config)
+    load_config,
+    get_xyZ)
 
 # ------------------- READ CONFIG ------------------- 
 config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml") 
@@ -70,6 +84,7 @@ hand_model_path = config["hand_landmark_detection"]["model_asset_path"]
 hand_fuse_left = config["hand_landmark_detection"]["hand_to_fuse"]["left"]
 hand_fuse_right = config["hand_landmark_detection"]["hand_to_fuse"]["right"]
 hand_fuse_both = config["hand_landmark_detection"]["hand_to_fuse"]["both"]
+hand_landmarks_name = tuple(config["hand_landmark_detection"]["hand_landmarks"])
 
 # -------------------- GET TRANSFORMATION MATRIX -------------------- 
 oak_data = load_data_from_npz_file(rightside_cam_calib_path)
@@ -115,6 +130,14 @@ hand_landmark_detection_result_queue = queue.Queue()  # This queue stores couple
 arm_landmark_input_queue = queue.Queue()  # This queue stores couple input rgb images (rs and oak) for ARM landmark detector
 arm_landmark_detection_result_queue = queue.Queue()  # This queue stores couple detection results of ARM landmarks
 
+arm_points_vis_queue = queue.Queue()  # This queue stores fused arm landmarks to visualize by open3d
+hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks to visualize by open3d 
+
+hand_to_fuse = "Left" if hand_fuse_left else "Right"
+arm_to_get = "left" if arm_fuse_left else "right"
+landmarks_name_want_to_get = get_landmarks_name_based_on_arm(arm_to_get)
+landmarks_id_want_to_get = [arm_pose_landmarks_name.index(name) for name in landmarks_name_want_to_get]
+
 if __name__ == "__main__":
     pipeline_rs, rsalign = initialize_realsense_cam(realsense_rgb_size, realsense_depth_size)
     pipeline_oak = initialize_oak_cam(oak_stereo_size)
@@ -141,12 +164,23 @@ if __name__ == "__main__":
             frame_color_format), 
         daemon=True)
 
+    vis_arm_thread = threading.Thread(target=visualize_arm,
+        args=(arm_points_vis_queue, True,),
+        daemon=True)
+
+    vis_hand_thread = threading.Thread(target=visualize_hand,
+        args=(hand_points_vis_queue,),
+        daemon=True)
+
     rs_thread.start()
     oak_thread.start()
     if hand_detection_activation:
         hand_landmark_detection_thread.start()
     if arm_detection_activation:
         arm_landmark_detection_thread.start()
+    if plot_3d:
+        vis_arm_thread.start()
+        #vis_hand_thread.start()
 
     timestamp = 0
     frame_count = 0
@@ -154,7 +188,13 @@ if __name__ == "__main__":
     fps = 0
 
     while True:
-        # 1. Preprocess rgb and its depth
+        rs_hand_landmarks, rs_handedness = None, None
+        oak_hand_landmarks, oak_handedness = None, None
+        rs_arm_landmarks = None
+        oak_arm_landmarks = None
+        arm_fused_XYZ, hand_fused_XYZ = None, None 
+
+        # 1. Get and preprocess rgb and its depth
         opposite_rgb, opposite_depth = opposite_frame_getter_queue.get()
         rightside_rgb, rightside_depth = rightside_frame_getter_queue.get()
 
@@ -165,33 +205,154 @@ if __name__ == "__main__":
 
         assert opposite_depth.shape == opposite_rgb.shape[:-1]
         assert rightside_depth.shape == rightside_rgb.shape[:-1]
+
+        # SYNCHRONOUSLY PERFORM
+        #processed_rs_img = np.copy(opposite_rgb) 
+        #processed_oak_img = np.copy(rightside_rgb)
+        #processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
+        #processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
+
+        #mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
+        #mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
+
+        #rs_arm_result = rs_arm_detector.detect_for_video(mp_rs_image, timestamp)
+        #oak_arm_result = oak_arm_detector.detect_for_video(mp_oak_image, timestamp)
+        #rs_arm_landmarks = get_normalized_pose_landmarks(rs_arm_result)
+        #oak_arm_landmarks = get_normalized_pose_landmarks(oak_arm_result)
+
+        #processed_rs_img = np.copy(opposite_rgb) 
+        #processed_oak_img = np.copy(rightside_rgb)
+        #processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
+        #processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
+
+        #mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
+        #mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
+
+        #rs_hand_result = rs_hand_detector.detect_for_video(mp_rs_image, timestamp)
+        #oak_hand_result = oak_hand_detector.detect_for_video(mp_oak_image, timestamp)
+        #rs_hand_landmarks, rs_handedness = get_normalized_hand_landmarks(rs_hand_result)
+        #oak_hand_landmarks, oak_handedness = get_normalized_hand_landmarks(oak_hand_result)
+
+        #opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks)
+        #rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks)
+        #opposite_rgb = draw_hand_landmarks_on_image(opposite_rgb, rs_hand_landmarks, rs_handedness)
+        #rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks, oak_handedness)
         
         # 2.1. Detect arm landmarks
         arm_landmark_input_queue.put((np.copy(opposite_rgb), np.copy(rightside_rgb), timestamp))
-
-        time.sleep(0.005)
+        if arm_landmark_input_queue.qsize() > 1:
+            arm_landmark_input_queue.get()
 
         # 2.2. Detect hand landmarks
         hand_landmark_input_queue.put((np.copy(opposite_rgb), np.copy(rightside_rgb), timestamp))
-        timestamp += 1
+        if hand_landmark_input_queue.qsize() > 1:
+            hand_landmark_input_queue.get()
 
-        # --------------- WAITING FOR THE MODELS TO PROCESS --------------- 
-        time.sleep(0.005)
+
+        ## --------------- WAITING FOR THE MODELS TO PROCESS --------------- 
+        time.sleep(0.001)
 
         if not hand_landmark_detection_result_queue.empty():
             rs_hand_landmarks_result, oak_hand_landmarks_result = hand_landmark_detection_result_queue.get()
-            opposite_rgb = draw_hand_landmarks_on_image(opposite_rgb, rs_hand_landmarks_result)
-            rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks_result)
+            rs_hand_landmarks, rs_handedness = get_normalized_hand_landmarks(rs_hand_landmarks_result)
+            oak_hand_landmarks, oak_handedness = get_normalized_hand_landmarks(oak_hand_landmarks_result)
+            opposite_rgb = draw_hand_landmarks_on_image(opposite_rgb, rs_hand_landmarks, rs_handedness)
+            rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks, oak_handedness)
 
         if not arm_landmark_detection_result_queue.empty():
             rs_arm_landmarks_result, oak_arm_landmarks_result = arm_landmark_detection_result_queue.get()
-            opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks_result)
-            rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks_result)
+            rs_arm_landmarks = get_normalized_pose_landmarks(rs_arm_landmarks_result)
+            oak_arm_landmarks = get_normalized_pose_landmarks(oak_arm_landmarks_result)
+            opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks)
+            rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks)
 
+        # Should perform in another thread
+        if rs_arm_landmarks and oak_arm_landmarks:
+            if arm_num_pose_detected == 1:
+                rs_arm_landmarks = rs_arm_landmarks[0]
+                oak_arm_landmarks = oak_arm_landmarks[0]
 
+            rs_arm_xyZ = get_xyZ(rs_arm_landmarks, 
+                opposite_depth, 
+                frame_size, 
+                sliding_window_size,
+                landmarks_id_want_to_get,
+                arm_visibility_threshold)  # shape: (N, 3)
+            oak_arm_xyZ = get_xyZ(oak_arm_landmarks, 
+                rightside_depth, 
+                frame_size, 
+                sliding_window_size,
+                landmarks_id_want_to_get,
+                arm_visibility_threshold)  # shape: (N, 3)
+            
+            if (rs_arm_xyZ is not None and
+                oak_arm_xyZ is not None and
+                not np.isnan(rs_arm_xyZ).any() and
+                not np.isnan(oak_arm_xyZ).any() and
+                len(rs_arm_xyZ) == len(oak_arm_xyZ) and 
+                len(rs_arm_xyZ) > 0 and
+                len(oak_arm_xyZ) > 0):
+                arm_fused_XYZ = fuse_landmarks_from_two_cameras(rs_arm_xyZ,  # shape: (N, 3)
+                    oak_arm_xyZ,  
+                    oak_ins,
+                    rs_ins,
+                    oak_2_rs_mat_avg) 
 
-        # 3. Get xyZ
-        # ....
+        if (rs_hand_landmarks and 
+            rs_handedness and 
+            oak_hand_landmarks and 
+            oak_handedness and
+            hand_to_fuse in rs_handedness and
+            hand_to_fuse in oak_handedness):
+
+            rs_hand_id = rs_handedness.index(hand_to_fuse)
+            oak_hand_id = oak_handedness.index(hand_to_fuse)
+            rs_hand_landmarks = rs_hand_landmarks[rs_hand_id]
+            oak_hand_landmarks = oak_hand_landmarks[oak_hand_id]
+
+            rs_hand_xyZ = get_xyZ(rs_hand_landmarks,  # shape: (21, 3) for single hand
+                opposite_depth,
+                frame_size,
+                sliding_window_size,
+                landmark_ids_to_get=None,
+                visibility_threshold=None)
+            oak_hand_xyZ = get_xyZ(oak_hand_landmarks,  # shape: (21, 3) for single hand
+                rightside_depth,
+                frame_size,
+                sliding_window_size,
+                landmark_ids_to_get=None,
+                visibility_threshold=None)
+
+            if (rs_hand_xyZ is not None and
+                oak_hand_xyZ is not None and 
+                not np.isnan(rs_hand_xyZ).any() and
+                not np.isnan(oak_hand_xyZ).any() and
+                len(rs_hand_xyZ) == len(oak_hand_xyZ) and
+                len(rs_hand_xyZ) > 0 and
+                len(oak_hand_xyZ) > 0):
+                hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_hand_xyZ,  # shape: (21, 3) for single hand
+                    oak_hand_xyZ,
+                    oak_ins,
+                    rs_ins,
+                    oak_2_rs_mat_avg)       
+
+        if (arm_fused_XYZ is not None and 
+            hand_fused_XYZ is not None):
+            """
+            Convert these all to shoulder coord. to plot
+            """
+            #arm_XYZ_wrt_shoulder = convert_to_shoulder_coord(arm_fused_XYZ, landmarks_name_want_to_get)  # (N, 3)
+            #hand_XYZ_wrt_wrist = convert_to_wrist_coord(hand_fused_XYZ, hand_landmarks_name)
+            arm_hand_fused_XYZ = np.concatenate([arm_fused_XYZ, hand_fused_XYZ], axis=0)
+            arm_hand_fused_names = landmarks_name_want_to_get.copy()
+            arm_hand_fused_names.extend(hand_landmarks_name) 
+            arm_hand_XYZ_wrt_shoulder = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
+
+            if plot_3d:
+                arm_points_vis_queue.put(arm_hand_XYZ_wrt_shoulder)
+                if arm_points_vis_queue.qsize() > 1:
+                    arm_points_vis_queue.get()
+                #hand_points_vis_queue.put(hand_XYZ_wrt_wrist)
 
         frame_count += 1
         elapsed_time = time.time() - start_time
@@ -201,6 +362,8 @@ if __name__ == "__main__":
             fps = frame_count / elapsed_time
             frame_count = 0
             start_time = time.time()
+
+        timestamp += 1
 
         frame_of_two_cam = np.vstack([opposite_rgb, rightside_rgb])
         frame_of_two_cam = cv2.resize(frame_of_two_cam, (640, 720))
