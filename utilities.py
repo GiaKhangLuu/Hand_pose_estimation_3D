@@ -14,15 +14,35 @@ from typing import Tuple, List
 from mediapipe.framework.formats import landmark_pb2
 import numpy as np
 
+from common import get_xyZ
+
 def filter_depth(depth_array: NDArray, sliding_window_size, sigma_color, sigma_space) -> NDArray:
     depth_array = depth_array.astype(np.float32)
     depth_array = cv2.bilateralFilter(depth_array, sliding_window_size, sigma_color, sigma_space)
     return depth_array
 
-def detect_arm_landmarks(rs_detector, oak_detector, input_queue, result_queue, image_format="bgr"):
+def detect_arm_landmarks(rs_detector, 
+    oak_detector, 
+    input_queue, 
+    result_queue, 
+    frame_size,
+    sliding_window_size,
+    landmarks_id_want_to_get,
+    arm_visibility_threshold,
+    oak_ins,
+    rs_ins,
+    oak_2_rs_mat_avg,
+    image_format="bgr",
+    arm_num_pose_detected=1):
     while True:
         if not input_queue.empty():
-            rs_color_img, oak_color_img, timestamp = input_queue.get()
+            detection_result = []
+            rs_arm_landmarks, oak_arm_landmarks = None, None
+            arm_fused_XYZ = None
+
+            rs_rgb_depth, oak_rgb_depth, timestamp = input_queue.get()
+            rs_color_img, opposite_depth = rs_rgb_depth
+            oak_color_img, rightside_depth = oak_rgb_depth
 
             processed_rs_img = np.copy(rs_color_img) 
             processed_oak_img = np.copy(oak_color_img)
@@ -38,17 +58,70 @@ def detect_arm_landmarks(rs_detector, oak_detector, input_queue, result_queue, i
             #rs_result = rs_detector.detect(mp_rs_image)
             #oak_result = oak_detector.detect(mp_oak_image)
 
-            if rs_result.pose_landmarks and oak_result.pose_landmarks:
-                result_queue.put((rs_result, oak_result))
-                if result_queue.qsize() > 1:
-                    result_queue.get()
+            rs_arm_landmarks = get_normalized_pose_landmarks(rs_result)
+            oak_arm_landmarks = get_normalized_pose_landmarks(oak_result)
+
+            if rs_arm_landmarks and oak_arm_landmarks:
+                if arm_num_pose_detected == 1:
+                    rs_arm_landmarks_xyZ = rs_arm_landmarks[0]
+                    oak_arm_landmarks_xyZ = oak_arm_landmarks[0]
+
+                rs_arm_xyZ = get_xyZ(rs_arm_landmarks_xyZ,  # shape: (N, 3)
+                    opposite_depth, 
+                    frame_size, 
+                    sliding_window_size,
+                    landmarks_id_want_to_get,
+                    arm_visibility_threshold)  
+                oak_arm_xyZ = get_xyZ(oak_arm_landmarks_xyZ,  # shape: (N, 3)
+                    rightside_depth, 
+                    frame_size, 
+                    sliding_window_size,
+                    landmarks_id_want_to_get,
+                    arm_visibility_threshold)  
+                
+                if (rs_arm_xyZ is not None and
+                    oak_arm_xyZ is not None and
+                    not np.isnan(rs_arm_xyZ).any() and
+                    not np.isnan(oak_arm_xyZ).any() and
+                    len(rs_arm_xyZ) == len(oak_arm_xyZ) and 
+                    len(rs_arm_xyZ) > 0 and
+                    len(oak_arm_xyZ) > 0):
+                    arm_fused_XYZ = fuse_landmarks_from_two_cameras(rs_arm_xyZ,  # shape: (N, 3)
+                        oak_arm_xyZ,  
+                        oak_ins,
+                        rs_ins,
+                        oak_2_rs_mat_avg) 
+
+            detection_result.append(rs_arm_landmarks)
+            detection_result.append(oak_arm_landmarks)
+            detection_result.append(arm_fused_XYZ)
+            result_queue.put(detection_result)
+            if result_queue.qsize() > 1:
+                result_queue.get()
 
         time.sleep(0.0001)
 
-def detect_hand_landmarks(rs_detector, oak_detector, input_queue, result_queue, image_format="bgr"):
+def detect_hand_landmarks(rs_detector, 
+    oak_detector, 
+    input_queue, 
+    result_queue, 
+    frame_size,
+    sliding_window_size,
+    oak_ins,
+    rs_ins,
+    oak_2_rs_mat_avg,
+    image_format="bgr",
+    hand_to_fuse="Left"):
     while True:
         if not input_queue.empty():
-            rs_color_img, oak_color_img, timestamp = input_queue.get()
+            detection_result = []
+            rs_hand_landmarks, oak_hand_landmarks = None, None
+            rs_handedness, oak_handedness = None, None
+            hand_fused_XYZ = None
+
+            rs_rgb_depth, oak_rgb_depth, timestamp = input_queue.get()
+            rs_color_img, opposite_depth = rs_rgb_depth
+            oak_color_img, rightside_depth = oak_rgb_depth
 
             processed_rs_img = np.copy(rs_color_img) 
             processed_oak_img = np.copy(oak_color_img)
@@ -62,10 +135,55 @@ def detect_hand_landmarks(rs_detector, oak_detector, input_queue, result_queue, 
             rs_result = rs_detector.detect_for_video(mp_rs_image, timestamp)
             oak_result = oak_detector.detect_for_video(mp_oak_image, timestamp)
 
-            if rs_result.hand_landmarks and oak_result.hand_landmarks:
-                result_queue.put((rs_result, oak_result))
-                if result_queue.qsize() > 1:
-                    result_queue.get()
+            rs_hand_landmarks, rs_handedness = get_normalized_hand_landmarks(rs_result)
+            oak_hand_landmarks, oak_handedness = get_normalized_hand_landmarks(oak_result)
+
+            if (rs_hand_landmarks and 
+                rs_handedness and 
+                oak_hand_landmarks and 
+                oak_handedness and
+                hand_to_fuse in rs_handedness and
+                hand_to_fuse in oak_handedness):
+
+                rs_hand_id = rs_handedness.index(hand_to_fuse)
+                oak_hand_id = oak_handedness.index(hand_to_fuse)
+                rs_hand_landmarks_xyZ = rs_hand_landmarks[rs_hand_id]
+                oak_hand_landmarks_xyZ = oak_hand_landmarks[oak_hand_id]
+
+                rs_hand_xyZ = get_xyZ(rs_hand_landmarks_xyZ,  # shape: (21, 3) for single hand
+                    opposite_depth,
+                    frame_size,
+                    sliding_window_size,
+                    landmark_ids_to_get=None,
+                    visibility_threshold=None)
+                oak_hand_xyZ = get_xyZ(oak_hand_landmarks_xyZ,  # shape: (21, 3) for single hand
+                    rightside_depth,
+                    frame_size,
+                    sliding_window_size,
+                    landmark_ids_to_get=None,
+                    visibility_threshold=None)
+
+                if (rs_hand_xyZ is not None and
+                    oak_hand_xyZ is not None and 
+                    not np.isnan(rs_hand_xyZ).any() and
+                    not np.isnan(oak_hand_xyZ).any() and
+                    len(rs_hand_xyZ) == len(oak_hand_xyZ) and
+                    len(rs_hand_xyZ) > 0 and
+                    len(oak_hand_xyZ) > 0):
+                    hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_hand_xyZ,  # shape: (21, 3) for single hand
+                        oak_hand_xyZ,
+                        oak_ins,
+                        rs_ins,
+                        oak_2_rs_mat_avg)       
+
+            rs_landmarks_handedness = (rs_hand_landmarks, rs_handedness)
+            oak_landmarks_handedness = (oak_hand_landmarks, oak_handedness)
+            detection_result.append(rs_landmarks_handedness) 
+            detection_result.append(oak_landmarks_handedness)
+            detection_result.append(hand_fused_XYZ)
+            result_queue.put(detection_result)
+            if result_queue.qsize() > 1:
+                result_queue.get()
 
         time.sleep(0.0001)
 
@@ -200,7 +318,9 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
             right_side_cam_intrinsic=right_side_cam_intrinsic,
             opposite_cam_intrinsic=opposite_cam_intrinsic,
             right_to_opposite_correctmat=right_to_opposite_correctmat)
-        result = minimize(min_dis, x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], tol=1e-1)
+        result = minimize(min_dis, 
+            x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], 
+            tol=1e-1)
         right_side_i_new_Z, opposite_i_new_Z = result.x
         right_side_new_Z.append(right_side_i_new_Z)
         opposite_new_Z.append(opposite_i_new_Z)

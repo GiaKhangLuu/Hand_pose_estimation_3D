@@ -153,7 +153,13 @@ if __name__ == "__main__":
             oak_hand_detector,
             hand_landmark_input_queue,
             hand_landmark_detection_result_queue,
-            frame_color_format), 
+            frame_size,
+            sliding_window_size,
+            oak_ins,
+            rs_ins,
+            oak_2_rs_mat_avg,
+            frame_color_format,
+            hand_to_fuse), 
         daemon=True)
 
     arm_landmark_detection_thread = threading.Thread(target=detect_arm_landmarks, 
@@ -161,7 +167,15 @@ if __name__ == "__main__":
             oak_arm_detector,
             arm_landmark_input_queue,
             arm_landmark_detection_result_queue,
-            frame_color_format), 
+            frame_size,
+            sliding_window_size,
+            landmarks_id_want_to_get,
+            arm_visibility_threshold,
+            oak_ins,
+            rs_ins,
+            oak_2_rs_mat_avg,
+            frame_color_format,
+            arm_num_pose_detected), 
         daemon=True)
 
     vis_arm_thread = threading.Thread(target=visualize_arm,
@@ -180,7 +194,7 @@ if __name__ == "__main__":
         arm_landmark_detection_thread.start()
     if plot_3d:
         vis_arm_thread.start()
-        #vis_hand_thread.start()
+        vis_hand_thread.start()
 
     timestamp = 0
     frame_count = 0
@@ -239,119 +253,57 @@ if __name__ == "__main__":
         #rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks, oak_handedness)
         
         # 2.1. Detect arm landmarks
-        arm_landmark_input_queue.put((np.copy(opposite_rgb), np.copy(rightside_rgb), timestamp))
+        rs_rgb_depth_for_arm = (np.copy(opposite_rgb), np.copy(opposite_depth))
+        oak_rgb_depth_for_arm = (np.copy(rightside_rgb), np.copy(rightside_depth))
+        arm_landmark_input_queue.put((rs_rgb_depth_for_arm, oak_rgb_depth_for_arm, timestamp))
         if arm_landmark_input_queue.qsize() > 1:
             arm_landmark_input_queue.get()
 
         # 2.2. Detect hand landmarks
-        hand_landmark_input_queue.put((np.copy(opposite_rgb), np.copy(rightside_rgb), timestamp))
-        if hand_landmark_input_queue.qsize() > 1:
-            hand_landmark_input_queue.get()
+        rs_rgb_depth_for_hand = (np.copy(opposite_rgb), np.copy(opposite_depth))
+        oak_rgb_depth_for_hand = (np.copy(rightside_rgb), np.copy(rightside_depth))
+        hand_landmark_input_queue.put((rs_rgb_depth_for_hand, oak_rgb_depth_for_hand, timestamp))
+        #if hand_landmark_input_queue.qsize() > 1:
+            #hand_landmark_input_queue.get()
 
 
         ## --------------- WAITING FOR THE MODELS TO PROCESS --------------- 
-        time.sleep(0.001)
+        time.sleep(0.1)  # set this value is important, because we must wait for the system to detect and fuse landmarks
 
         if not hand_landmark_detection_result_queue.empty():
-            rs_hand_landmarks_result, oak_hand_landmarks_result = hand_landmark_detection_result_queue.get()
-            rs_hand_landmarks, rs_handedness = get_normalized_hand_landmarks(rs_hand_landmarks_result)
-            oak_hand_landmarks, oak_handedness = get_normalized_hand_landmarks(oak_hand_landmarks_result)
+            rs_hand_landmarks_handedness, oak_hand_landmarks_handedness, hand_fused_XYZ = hand_landmark_detection_result_queue.get()
+            rs_hand_landmarks, rs_handedness = rs_hand_landmarks_handedness
+            oak_hand_landmarks, oak_handedness = oak_hand_landmarks_handedness
             opposite_rgb = draw_hand_landmarks_on_image(opposite_rgb, rs_hand_landmarks, rs_handedness)
             rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks, oak_handedness)
 
+            if hand_fused_XYZ is not None:
+                hand_XYZ_wrt_wrist = convert_to_wrist_coord(hand_fused_XYZ, hand_landmarks_name)
+                hand_points_vis_queue.put(hand_XYZ_wrt_wrist)
+                if hand_points_vis_queue.qsize() > 1:
+                    hand_points_vis_queue.get()
+
         if not arm_landmark_detection_result_queue.empty():
-            rs_arm_landmarks_result, oak_arm_landmarks_result = arm_landmark_detection_result_queue.get()
-            rs_arm_landmarks = get_normalized_pose_landmarks(rs_arm_landmarks_result)
-            oak_arm_landmarks = get_normalized_pose_landmarks(oak_arm_landmarks_result)
+            rs_arm_landmarks, oak_arm_landmarks, arm_fused_XYZ = arm_landmark_detection_result_queue.get()
             opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks)
             rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks)
 
-        # Should perform in another thread
-        if rs_arm_landmarks and oak_arm_landmarks:
-            if arm_num_pose_detected == 1:
-                rs_arm_landmarks = rs_arm_landmarks[0]
-                oak_arm_landmarks = oak_arm_landmarks[0]
+        #if (arm_fused_XYZ is not None and 
+            #hand_fused_XYZ is not None):
+            #"""
+            #Convert these all to shoulder coord. to plot
+            #"""
+            ##arm_XYZ_wrt_shoulder = convert_to_shoulder_coord(arm_fused_XYZ, landmarks_name_want_to_get)  # (N, 3)
+            ##hand_XYZ_wrt_wrist = convert_to_wrist_coord(hand_fused_XYZ, hand_landmarks_name)
+            #arm_hand_fused_XYZ = np.concatenate([arm_fused_XYZ, hand_fused_XYZ], axis=0)
+            #arm_hand_fused_names = landmarks_name_want_to_get.copy()
+            #arm_hand_fused_names.extend(hand_landmarks_name) 
+            #arm_hand_XYZ_wrt_shoulder = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
 
-            rs_arm_xyZ = get_xyZ(rs_arm_landmarks, 
-                opposite_depth, 
-                frame_size, 
-                sliding_window_size,
-                landmarks_id_want_to_get,
-                arm_visibility_threshold)  # shape: (N, 3)
-            oak_arm_xyZ = get_xyZ(oak_arm_landmarks, 
-                rightside_depth, 
-                frame_size, 
-                sliding_window_size,
-                landmarks_id_want_to_get,
-                arm_visibility_threshold)  # shape: (N, 3)
-            
-            if (rs_arm_xyZ is not None and
-                oak_arm_xyZ is not None and
-                not np.isnan(rs_arm_xyZ).any() and
-                not np.isnan(oak_arm_xyZ).any() and
-                len(rs_arm_xyZ) == len(oak_arm_xyZ) and 
-                len(rs_arm_xyZ) > 0 and
-                len(oak_arm_xyZ) > 0):
-                arm_fused_XYZ = fuse_landmarks_from_two_cameras(rs_arm_xyZ,  # shape: (N, 3)
-                    oak_arm_xyZ,  
-                    oak_ins,
-                    rs_ins,
-                    oak_2_rs_mat_avg) 
-
-        if (rs_hand_landmarks and 
-            rs_handedness and 
-            oak_hand_landmarks and 
-            oak_handedness and
-            hand_to_fuse in rs_handedness and
-            hand_to_fuse in oak_handedness):
-
-            rs_hand_id = rs_handedness.index(hand_to_fuse)
-            oak_hand_id = oak_handedness.index(hand_to_fuse)
-            rs_hand_landmarks = rs_hand_landmarks[rs_hand_id]
-            oak_hand_landmarks = oak_hand_landmarks[oak_hand_id]
-
-            rs_hand_xyZ = get_xyZ(rs_hand_landmarks,  # shape: (21, 3) for single hand
-                opposite_depth,
-                frame_size,
-                sliding_window_size,
-                landmark_ids_to_get=None,
-                visibility_threshold=None)
-            oak_hand_xyZ = get_xyZ(oak_hand_landmarks,  # shape: (21, 3) for single hand
-                rightside_depth,
-                frame_size,
-                sliding_window_size,
-                landmark_ids_to_get=None,
-                visibility_threshold=None)
-
-            if (rs_hand_xyZ is not None and
-                oak_hand_xyZ is not None and 
-                not np.isnan(rs_hand_xyZ).any() and
-                not np.isnan(oak_hand_xyZ).any() and
-                len(rs_hand_xyZ) == len(oak_hand_xyZ) and
-                len(rs_hand_xyZ) > 0 and
-                len(oak_hand_xyZ) > 0):
-                hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_hand_xyZ,  # shape: (21, 3) for single hand
-                    oak_hand_xyZ,
-                    oak_ins,
-                    rs_ins,
-                    oak_2_rs_mat_avg)       
-
-        if (arm_fused_XYZ is not None and 
-            hand_fused_XYZ is not None):
-            """
-            Convert these all to shoulder coord. to plot
-            """
-            #arm_XYZ_wrt_shoulder = convert_to_shoulder_coord(arm_fused_XYZ, landmarks_name_want_to_get)  # (N, 3)
-            #hand_XYZ_wrt_wrist = convert_to_wrist_coord(hand_fused_XYZ, hand_landmarks_name)
-            arm_hand_fused_XYZ = np.concatenate([arm_fused_XYZ, hand_fused_XYZ], axis=0)
-            arm_hand_fused_names = landmarks_name_want_to_get.copy()
-            arm_hand_fused_names.extend(hand_landmarks_name) 
-            arm_hand_XYZ_wrt_shoulder = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
-
-            if plot_3d:
-                arm_points_vis_queue.put(arm_hand_XYZ_wrt_shoulder)
-                if arm_points_vis_queue.qsize() > 1:
-                    arm_points_vis_queue.get()
+            #if plot_3d:
+                #arm_points_vis_queue.put(arm_hand_XYZ_wrt_shoulder)
+                #if arm_points_vis_queue.qsize() > 1:
+                    #arm_points_vis_queue.get()
                 #hand_points_vis_queue.put(hand_XYZ_wrt_wrist)
 
         frame_count += 1

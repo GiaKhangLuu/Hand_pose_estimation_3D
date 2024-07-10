@@ -63,7 +63,7 @@ hand_landmark_detection:
     - PINKY_TIP
 
 arm_landmark_detection:
-  is_enable: true
+  is_enable: false
   arm_to_fuse:
     left: true
     right: false
