@@ -66,7 +66,7 @@ def visualize_arm(lmks_queue,
         vis.poll_events()
         vis.update_renderer()        
 
-        time.sleep(0.1)  # Set time sleep here is importance, the higher time.sleep parameter is (unit is second), the faster the main thread can process
+        time.sleep(0.01)  # Set time sleep here is importance, the higher time.sleep parameter is (unit is second), the faster the main thread can process
 
     vis.destroy_window()
 

@@ -29,7 +29,7 @@ utilities:
   save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
 
 hand_landmark_detection:
-  is_enable: true
+  is_enable: false
   hand_to_fuse:
     left: true
     right: false
@@ -63,7 +63,7 @@ hand_landmark_detection:
     - PINKY_TIP
 
 arm_landmark_detection:
-  is_enable: false
+  is_enable: true
   arm_to_fuse:
     left: true
     right: false

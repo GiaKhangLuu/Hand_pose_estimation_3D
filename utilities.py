@@ -32,6 +32,7 @@ def detect_arm_landmarks(rs_detector,
     oak_ins,
     rs_ins,
     oak_2_rs_mat_avg,
+    num_landmarks,
     image_format="bgr",
     arm_num_pose_detected=1):
     while True:
@@ -83,14 +84,14 @@ def detect_arm_landmarks(rs_detector,
                     oak_arm_xyZ is not None and
                     not np.isnan(rs_arm_xyZ).any() and
                     not np.isnan(oak_arm_xyZ).any() and
-                    len(rs_arm_xyZ) == len(oak_arm_xyZ) and 
-                    len(rs_arm_xyZ) > 0 and
-                    len(oak_arm_xyZ) > 0):
+                    len(rs_arm_xyZ) == num_landmarks and 
+                    len(oak_arm_xyZ) == num_landmarks):
                     arm_fused_XYZ = fuse_landmarks_from_two_cameras(rs_arm_xyZ,  # shape: (N, 3)
                         oak_arm_xyZ,  
                         oak_ins,
                         rs_ins,
-                        oak_2_rs_mat_avg) 
+                        oak_2_rs_mat_avg,
+                        num_landmarks) 
 
             detection_result.append(rs_arm_landmarks)
             detection_result.append(oak_arm_landmarks)
@@ -99,7 +100,7 @@ def detect_arm_landmarks(rs_detector,
             if result_queue.qsize() > 1:
                 result_queue.get()
 
-        time.sleep(0.0001)
+        time.sleep(0.001)
 
 def detect_hand_landmarks(rs_detector, 
     oak_detector, 
@@ -110,6 +111,7 @@ def detect_hand_landmarks(rs_detector,
     oak_ins,
     rs_ins,
     oak_2_rs_mat_avg,
+    num_landmarks,
     image_format="bgr",
     hand_to_fuse="Left"):
     while True:
@@ -167,14 +169,14 @@ def detect_hand_landmarks(rs_detector,
                     oak_hand_xyZ is not None and 
                     not np.isnan(rs_hand_xyZ).any() and
                     not np.isnan(oak_hand_xyZ).any() and
-                    len(rs_hand_xyZ) == len(oak_hand_xyZ) and
-                    len(rs_hand_xyZ) > 0 and
-                    len(oak_hand_xyZ) > 0):
+                    len(rs_hand_xyZ) == num_landmarks and
+                    len(oak_hand_xyZ) == num_landmarks):
                     hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_hand_xyZ,  # shape: (21, 3) for single hand
                         oak_hand_xyZ,
                         oak_ins,
                         rs_ins,
-                        oak_2_rs_mat_avg)       
+                        oak_2_rs_mat_avg,
+                        num_landmarks)       
 
             rs_landmarks_handedness = (rs_hand_landmarks, rs_handedness)
             oak_landmarks_handedness = (oak_hand_landmarks, oak_handedness)
@@ -185,7 +187,7 @@ def detect_hand_landmarks(rs_detector,
             if result_queue.qsize() > 1:
                 result_queue.get()
 
-        time.sleep(0.0001)
+        time.sleep(0.001)
 
 def get_normalized_pose_landmarks(detection_result):
     pose_landmarks_list = detection_result.pose_landmarks
@@ -253,7 +255,8 @@ def distance(Z,
 	opposite_xyZ, 
     right_side_cam_intrinsic, 
     opposite_cam_intrinsic,
-    right_to_opposite_correctmat):
+    right_to_opposite_correctmat,
+    num_landmarks):
     """
     Input:
         right_side_xyZ: shape = (3,)
@@ -261,23 +264,28 @@ def distance(Z,
         right_to_opposite_correctmat: shape = (4, 4)
     """
 
-    right_side_Z, opposite_Z = Z
+    # Now note that right_side_Z is num_landmarks-dimension and opposite_Z is also num_landmarks-dimension
+    # right_side_XYZ and opposite_XYZ have shape: (M, 3)
+    right_side_Z, opposite_Z = Z[:num_landmarks], Z[num_landmarks:]
     right_side_XYZ = np.zeros_like(right_side_xyZ)
     opposite_XYZ = np.zeros_like(opposite_xyZ)
 
-    right_side_XYZ[0] = (right_side_xyZ[0] - right_side_cam_intrinsic[0, -1]) * right_side_Z / right_side_cam_intrinsic[0, 0]
-    right_side_XYZ[1] = (right_side_xyZ[1] - right_side_cam_intrinsic[1, -1]) * right_side_Z / right_side_cam_intrinsic[1, 1]
-    right_side_XYZ[-1] = right_side_Z
+    right_side_XYZ[..., 0] = (right_side_xyZ[..., 0] - right_side_cam_intrinsic[0, -1]) * right_side_Z / right_side_cam_intrinsic[0, 0]
+    right_side_XYZ[..., 1] = (right_side_xyZ[..., 1] - right_side_cam_intrinsic[1, -1]) * right_side_Z / right_side_cam_intrinsic[1, 1]
+    right_side_XYZ[..., -1] = right_side_Z
 
-    opposite_XYZ[0] = (opposite_xyZ[0] - opposite_cam_intrinsic[0, -1]) * opposite_Z / opposite_cam_intrinsic[0, 0]
-    opposite_XYZ[1] = (opposite_xyZ[1] - opposite_cam_intrinsic[1, -1]) * opposite_Z / opposite_cam_intrinsic[1, 1]
-    opposite_XYZ[-1] = opposite_Z
+    opposite_XYZ[..., 0] = (opposite_xyZ[..., 0] - opposite_cam_intrinsic[0, -1]) * opposite_Z / opposite_cam_intrinsic[0, 0]
+    opposite_XYZ[..., 1] = (opposite_xyZ[..., 1] - opposite_cam_intrinsic[1, -1]) * opposite_Z / opposite_cam_intrinsic[1, 1]
+    opposite_XYZ[..., -1] = opposite_Z
 
-    #homo = np.ones(shape=oak_XYZ.shape[0])
-    right_side_XYZ_homo = np.concatenate([right_side_XYZ, [1]])
-    right_side_XYZ_in_opposite = np.matmul(right_to_opposite_correctmat, right_side_XYZ_homo.T)
-    right_side_XYZ_in_opposite = right_side_XYZ_in_opposite[:-1]
-    return euclidean(right_side_XYZ_in_opposite, opposite_XYZ)
+    homo = np.ones(shape=right_side_XYZ.shape[:-1])  # shape: (num_landmarks,) or (N, num_landmarks)
+    right_side_XYZ_homo = np.concatenate([right_side_XYZ, homo[..., None]], axis=-1)  # shape: (num_landmarks, 4) or (N, num_landmarks, 4)
+    right_side_XYZ_in_opposite = np.matmul(right_to_opposite_correctmat,   
+        right_side_XYZ_homo.T)  # shape: (4, num_landmarks)
+    right_side_XYZ_in_opposite = right_side_XYZ_in_opposite.T  # shape: (num_landmarks, 4)
+    right_side_XYZ_in_opposite = right_side_XYZ_in_opposite[..., :-1]
+
+    return np.sum(np.linalg.norm(right_side_XYZ_in_opposite - opposite_XYZ, axis=1))
 
 def xyZ_to_XYZ(xyZ, intrinsic_mat):
     """
@@ -298,7 +306,8 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
     right_side_xyZ: NDArray,
     right_side_cam_intrinsic,
     opposite_cam_intrinsic,
-    right_to_opposite_correctmat) -> NDArray:
+    right_to_opposite_correctmat,
+    num_landmarks) -> NDArray:
     """
     Input:
         opposite_xyZ: shape = (N, 3)
@@ -308,28 +317,26 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
         fused_landmarks: shape (N, 3)
     """
 
-    right_side_new_Z, opposite_new_Z = [], []
-    for i in range(right_side_xyZ.shape[0]):
-        right_side_i_xyZ, opposite_i_xyZ = right_side_xyZ[i], opposite_xyZ[i]
-
-        min_dis = partial(distance, 
-			right_side_xyZ=right_side_i_xyZ, 
-			opposite_xyZ=opposite_i_xyZ,
-            right_side_cam_intrinsic=right_side_cam_intrinsic,
-            opposite_cam_intrinsic=opposite_cam_intrinsic,
-            right_to_opposite_correctmat=right_to_opposite_correctmat)
-        result = minimize(min_dis, 
-            x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], 
-            tol=1e-1)
-        right_side_i_new_Z, opposite_i_new_Z = result.x
-        right_side_new_Z.append(right_side_i_new_Z)
-        opposite_new_Z.append(opposite_i_new_Z)
+    min_dis = partial(distance,
+        right_side_xyZ=right_side_xyZ,
+        opposite_xyZ=opposite_xyZ,
+        right_side_cam_intrinsic=right_side_cam_intrinsic,
+        opposite_cam_intrinsic=opposite_cam_intrinsic,
+        right_to_opposite_correctmat=right_to_opposite_correctmat,
+        num_landmarks=num_landmarks)
+    x0 = np.array([right_side_xyZ[..., -1], opposite_xyZ[..., -1]])
+    x0 = x0.flatten()
+    result = minimize(min_dis, 
+        x0=x0,
+        method="L-BFGS-B",
+        tol=0.00001)
+    right_side_optimized_Z, opposite_optimized_Z = result.x[:num_landmarks], result.x[num_landmarks:]
 
     right_side_new_xyZ = right_side_xyZ.copy()
     opposite_new_xyZ = opposite_xyZ.copy()
 
-    right_side_new_xyZ[:, -1] = right_side_new_Z
-    opposite_new_xyZ[:, -1] = opposite_new_Z
+    right_side_new_xyZ[:, -1] = right_side_optimized_Z
+    opposite_new_xyZ[:, -1] = opposite_optimized_Z
 
     right_side_new_XYZ = xyZ_to_XYZ(right_side_new_xyZ, right_side_cam_intrinsic)
     opposite_new_XYZ = xyZ_to_XYZ(opposite_new_xyZ, opposite_cam_intrinsic)
