@@ -200,7 +200,10 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
             right_side_cam_intrinsic=right_side_cam_intrinsic,
             opposite_cam_intrinsic=opposite_cam_intrinsic,
             right_to_opposite_correctmat=right_to_opposite_correctmat)
-        result = minimize(min_dis, x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], tol=1e-1)
+        result = minimize(min_dis, 
+            x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], 
+            tol=1e-1,
+            method="SLSQP")
         right_side_i_new_Z, opposite_i_new_Z = result.x
         right_side_new_Z.append(right_side_i_new_Z)
         opposite_new_Z.append(opposite_i_new_Z)

@@ -28,6 +28,22 @@ utilities:
   plot_3d: true              # Plot the hand landmarks on open3d
   save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
 
+debugging_mode:
+  draw_xyz: false
+  show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+  show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
+  show_left_arm_angle_j3: true       # Plotting left arm joint 3 and its reference vector to debug (visualize)
+  show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
+  show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
+  ref_vector_color: 
+    - 1
+    - 0
+    - 0
+  joint_vector_color: 
+    - 0
+    - 0
+    - 1
+
 hand_landmark_detection:
   is_enable: true
   hand_to_fuse:

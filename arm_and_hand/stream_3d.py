@@ -1,22 +1,31 @@
 import sys
 import os
 
-CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(os.path.join(CURRENT_DIR, '..'))
+#CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
+#sys.path.append(os.path.join(CURRENT_DIR, '..'))
 
 import numpy as np
 import open3d as o3d
 import threading
 import time
 
-#from arm_landmarks.angle_calculation import (calculate_angle_j1,
-                                             #calculate_angle_j2,
-                                             #calculate_angle_j3,
-                                             #calculate_angle_j4,
-                                             #calculate_rotation_matrix_to_compute_angle_of_j3_and_j4)
+from angle_calculation import (calculate_angle_j1,
+    calculate_angle_j2,
+    calculate_angle_j3,
+    calculate_angle_j4,
+    calculate_rotation_matrix_to_compute_angle_of_j3_and_j4)
 
 def visualize_arm(lmks_queue,
-    visualize_with_hand=False):
+    landmark_dictionary, 
+    show_left_arm_j1=False,
+    show_left_arm_j2=False,
+    show_left_arm_j3=False,
+    show_left_arm_j4=False,
+    show_left_arm_j5=False,
+    draw_xyz=False,
+    visualize_with_hand=False,
+    joint_vector_color=None,
+    ref_vector_color=None):
     x = np.array([[0, 0, 0],
                   [500, 0, 0],
                   [0, 500, 0],
@@ -53,7 +62,40 @@ def visualize_arm(lmks_queue,
                 lines = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 5], [3, 4],
                     [0, 6], [0, 7],
                     [6, 8], [7, 8]]
+
             colors = [[0, 0, 0] for i in range(len(lines))]
+
+            if show_left_arm_j3:  # Debugging calculating joint 3
+                _, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
+                _, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
+                trans_mat, trans_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
+                b_prime_proj, b_prime, _ = calculate_angle_j3(pts, trans_mat_inv, landmark_dictionary)
+
+                b_prime_in_world_to_plot = np.matmul(trans_mat, b_prime.T)
+                b_prime_in_world_to_plot = b_prime_in_world_to_plot.T
+                b_prime_proj_in_world_to_plot = np.matmul(trans_mat, b_prime_proj.T)
+                b_prime_proj_in_world_to_plot = b_prime_proj_in_world_to_plot.T
+
+                pts = np.concatenate([pts, [b_prime_in_world_to_plot, b_prime_proj_in_world_to_plot]], axis=0)
+                last_index = pts.shape[0] - 1
+                lines.extend([[0, last_index - 1], [0, last_index]])
+                colors.extend([joint_vector_color, ref_vector_color])
+
+            if show_left_arm_j4: # Debugging calculating joint 4
+                _, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
+                _, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
+                trans_mat, trans_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
+                a, b, _ = calculate_angle_j4(pts, trans_mat, trans_mat_inv, landmark_dictionary)
+
+                b_in_original_coor = np.matmul(trans_mat, b.T)
+                b_in_original_coor = b_in_original_coor.T
+                a_in_original_coor = np.matmul(trans_mat, a.T)
+                a_in_original_coor = a_in_original_coor.T
+
+                pts = np.concatenate([pts, [b_in_original_coor, a_in_original_coor * 20]], axis=0)
+                last_index = pts.shape[0] - 1
+                lines.extend([[0, last_index - 1], [0, last_index]])
+                colors.extend([joint_vector_color, ref_vector_color])
 
             pcd.points = o3d.utility.Vector3dVector(pts)
             line_set.points = o3d.utility.Vector3dVector(pts)  # Update the points
@@ -66,7 +108,7 @@ def visualize_arm(lmks_queue,
         vis.poll_events()
         vis.update_renderer()        
 
-        time.sleep(0.1)  # Set time sleep here is importance, the higher time.sleep parameter is (unit is second), the faster the main thread can process
+        time.sleep(0.01)  # Set time sleep here is importance, the higher time.sleep parameter is (unit is second), the faster the main thread can process
 
     vis.destroy_window()
 
