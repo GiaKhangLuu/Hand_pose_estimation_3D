@@ -15,11 +15,11 @@ camera:
 
 process_frame:
   frame_color_format: bgr
-  frame_size:  # the higher resolution is, the futher distance which is processed by the system
+  frame_size:  # the higher resolution is, the futher distance which can be processed by the system
     width: 960
     height: 540
   depth_smoothing:
-    sliding_window_size: 12          # Diameter of each pixel neighborhood
+    sliding_window_size: 21          # Diameter of each pixel neighborhood
     sigma_color: 25                  # Filter sigma in the color space for bilateral
     sigma_space: 25                  # Filter sigma in the coordinate space for bilateral
 
@@ -32,9 +32,10 @@ debugging_mode:
   draw_xyz: false
   show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
   show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
-  show_left_arm_angle_j3: true       # Plotting left arm joint 3 and its reference vector to debug (visualize)
+  show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
   show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
   show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
+  show_left_arm_angle_j6: true       # Plotting left arm joint 6 and its reference vector to debug (visualize)
   ref_vector_color: 
     - 1
     - 0
@@ -50,9 +51,9 @@ hand_landmark_detection:
     left: true
     right: false
     both: false
-  min_detection_confidence: 0.5
-  min_tracking_confidence: 0.5
-  visibility_threshold: 0.2
+  min_detection_confidence: 0.3
+  min_presence_confidence: 0.3
+  min_tracking_confidence: 0.3
   num_hand: 2
   model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/hand_landmarker.task
   hand_landmarks:

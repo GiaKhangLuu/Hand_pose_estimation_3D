@@ -52,7 +52,8 @@ def calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(XYZ_landmarks, angle
     when joint_1 and joint_2 rotate, we have new coordinate.
     """
 
-    rot_mat = R.from_euler("yz", [angle_j2, angle_j1], degrees=True).as_matrix() 
+    #rot_mat = R.from_euler("yz", [angle_j2, angle_j1], degrees=True).as_matrix() 
+    rot_mat = R.from_euler("zy", [angle_j1, angle_j2], degrees=True).as_matrix() 
 
     z_new = np.matmul(rot_mat, [0, 0, 1])
     y_new = XYZ_landmarks[landmark_dictionary.index("left elbow")]
@@ -68,7 +69,7 @@ def calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(XYZ_landmarks, angle
 
     return trans_mat, trans_mat_inv
 
-def calculate_angle_j3(XYZ_landmarks, trans_mat_inv, landmark_dictionary):
+def calculate_angle_j3(XYZ_landmarks, trans_mat, trans_mat_inv, landmark_dictionary):
     """
     The values (x, y, z) of vector `a` and `b` in this function is belong to 
     the new coordinate (when joint1 and joint2) rotate, not the original 
@@ -77,9 +78,11 @@ def calculate_angle_j3(XYZ_landmarks, trans_mat_inv, landmark_dictionary):
         trans_mat_inv: Get the value of joint in this coordinate to compute angle
     """
     b = XYZ_landmarks[landmark_dictionary.index("WRIST")] - XYZ_landmarks[landmark_dictionary.index("left elbow")]
-    b = np.matmul(trans_mat_inv, b.T)  # get b in the new coordinate
-    b = b.T  
-    a = b * [1, 1, 0]  # vector a is the projection of vector b to Oxy plane => z = 0
+    b = np.matmul(trans_mat_inv, b)  # get b in the new coordinate
+    b = b * [1, 0, 1]  
+
+    a = trans_mat[:, 0]  # ref. vector is vector x_unit (1, 0, 0) (IN NEW COORDINATE) 
+    a = np.matmul(trans_mat_inv, a)
     
     dot = np.sum(a * b)
     unit_a = np.linalg.norm(a)
@@ -90,7 +93,6 @@ def calculate_angle_j3(XYZ_landmarks, trans_mat_inv, landmark_dictionary):
     c = np.cross(a, b)
     ref = c[1] + 1e-9  # get the sign of element y of vector c
     signs = ref / np.absolute(ref)
-
     angle_j3 *= signs
 
     return a, b, angle_j3
@@ -104,13 +106,11 @@ def calculate_angle_j4(XYZ_landmarks, trans_mat, trans_mat_inv, landmark_diction
         trans_mat_inv: Get the value of joint in this coordinate to compute angle
     """
     b = XYZ_landmarks[landmark_dictionary.index("WRIST")] - XYZ_landmarks[landmark_dictionary.index("left elbow")]
-    b = np.matmul(trans_mat_inv, b.T)  # get b in the new coordinate
-    b = b.T  
+    b = np.matmul(trans_mat_inv, b)  # get b in the new coordinate
     b = b * [1, 1, 0]  # vector b projects to Oxy plane => z = 0
 
     a = trans_mat[:, 0]  # ref. vector is vector x_unit (1, 0, 0) (IN NEW COORDINATE) 
-    a = np.matmul(trans_mat_inv, a.T)
-    a = a.T
+    a = np.matmul(trans_mat_inv, a)
     
     dot = np.sum(a * b)
     unit_a = np.linalg.norm(a)
@@ -125,31 +125,86 @@ def calculate_angle_j4(XYZ_landmarks, trans_mat, trans_mat_inv, landmark_diction
 
     return a, b, angle_j4
 
+def calculate_elbow_coords(XYZ_landmarks, landmark_dictionary, shoulder_coords_in_world, angle_j3, angle_j4):
+    """
+    Input:
+        shoulder_coords: Shoudler coordinate
+            shape = (3, 3)
+            x = shoulder_coords[:, 0], y = shoulder_coords[:, 1], z = shoulder_coords[:, 2]
+    """
+
+    angle_j4 = -angle_j4  # In order to be compatible with the robot in RVIZ, we need to HARDCODE to -angle_j4
+    elbow_coords_in_shoulder = R.from_euler("zy", [angle_j4, angle_j3], degrees=True).as_matrix()
+    #elbow_coords_in_shoulder = R.from_euler("yz", [angle_j3, angle_j4], degrees=True).as_matrix()
+    elbow_coords_in_world = np.matmul(shoulder_coords_in_world, elbow_coords_in_shoulder)    
+
+    return elbow_coords_in_world, elbow_coords_in_shoulder
+
+def calculate_wrist_coords(XYZ_landmarks, landmark_dictionary):
+    # We must ensure that x, y and z from wrist_coords have the same direction as x, y and z from elbow_coords
+    u_wrist = XYZ_landmarks[landmark_dictionary.index("INDEX_FINGER_MCP"), :] - XYZ_landmarks[landmark_dictionary.index("WRIST"), :]
+    x_wrist = XYZ_landmarks[landmark_dictionary.index("MIDDLE_FINGER_MCP"), :] - XYZ_landmarks[landmark_dictionary.index("WRIST"), :]
+
+    y_wrist = np.cross(u_wrist, x_wrist)
+    z_wrist = np.cross(x_wrist, y_wrist)
+
+    x_wrist_unit = x_wrist / np.linalg.norm(x_wrist)
+    y_wrist_unit = y_wrist / np.linalg.norm(y_wrist)
+    z_wrist_unit = z_wrist / np.linalg.norm(z_wrist)
+
+    wrist_coords_in_world = np.array([x_wrist_unit, y_wrist_unit, z_wrist_unit])
+    wrist_coords_in_world = np.transpose(wrist_coords_in_world)
+
+    return wrist_coords_in_world
+
+def calculate_angle_j5(wrist_coords_in_elbow_rot_mat):
+    # Joint 5 rotates around x-axis 
+    angle_j5, _, _ = wrist_coords_in_elbow_rot_mat.as_euler("xyz", degrees=True)
+    return angle_j5
+
+def calculate_angle_j6(wrist_coords_in_elbow_rot_mat):
+    # Joint 6 rotates around z-axis
+    _, _, angle_j6 = wrist_coords_in_elbow_rot_mat.as_euler("xyz", degrees=True)
+    return angle_j6
+
+def calculate_wrist_coords_in_elbow(wrist_coords_in_world, elbow_coords_in_world):
+    """
+    As the equation, wrist_coords_in_elbow = (elbow_coords_in_world)^(-1) @ wrist_coords_in_world
+    """
+    elbow_coords_in_world_inv = np.linalg.inv(elbow_coords_in_world)
+    wrist_coords_in_elbow = np.matmul(elbow_coords_in_world_inv, wrist_coords_in_world)
+    return wrist_coords_in_elbow
+
 def get_angles_between_joints(XYZ_landmarks, landmark_dictionary):
 
-    # Joint 1
+    # Joint 1 and Joint 2
     _, _, angle_j1 = calculate_angle_j1(XYZ_landmarks, landmark_dictionary)
-
-    # Joint 2 
     _, _, angle_j2 = calculate_angle_j2(XYZ_landmarks, landmark_dictionary)
 
-    trans_mat, trans_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(XYZ_landmarks, angle_j1, angle_j2, landmark_dictionary)
+    # Joint 3 and Joint 4
+    shoulder_rot_mat_in_w, shoulder_rot_mat_in_w_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(XYZ_landmarks, angle_j1, angle_j2, landmark_dictionary)
+    _, _, angle_j3 = calculate_angle_j3(XYZ_landmarks, shoulder_rot_mat_in_w, shoulder_rot_mat_in_w_inv, landmark_dictionary)
+    _, _, angle_j4 = calculate_angle_j4(XYZ_landmarks, shoulder_rot_mat_in_w, shoulder_rot_mat_in_w_inv, landmark_dictionary)
 
-    # Joint 3
-    _, _, angle_j3 = calculate_angle_j3(XYZ_landmarks, trans_mat_inv, landmark_dictionary)
+    # Joint 5 and Joint 6
+    """
+    In order to calculate angles of joint_5 and joint_6, we follow these steps:
+    1. Find the elbow coordinate. Got the elbow coordinate from the shoulder coordinate,    
+        angles of joint_3 and joint_4.
+    2. Find the wrist coordinate. We must ensure that (x_unit, y_unit, z_unit) 
+        of wrist coordinate has the same direction as (x_unit, y_unit, z_unit)
+        of elbow coordinate.
+    3. Calculate the rotation matrix from elbow coordinate to wrist coordinate. 
+        -> As the equation, wrist_coords_in_elbow = (elbow_coords_in_world)^(-1) @ wrist_coords_in_world
+    4. Extract roll, pitch and yaw from that rotation matrix.
+    """
+    elbow_coords_in_world, _ = calculate_elbow_coords(XYZ_landmarks, landmark_dictionary, 
+        shoulder_rot_mat_in_w, angle_j3, angle_j4)
+    wrist_coords_in_world = calculate_wrist_coords(XYZ_landmarks, landmark_dictionary)
+    wrist_coords_in_elbow = calculate_wrist_coords_in_elbow(wrist_coords_in_world, elbow_coords_in_world)
+    rot_mat = R.from_matrix(wrist_coords_in_elbow)
+    angle_j5 = calculate_angle_j5(rot_mat)
+    angle_j6 = calculate_angle_j6(rot_mat)
 
-    # Joint 4
-    _, _, angle_j4 = calculate_angle_j4(XYZ_landmarks, trans_mat, trans_mat_inv, landmark_dictionary)
-
-    # Joint 5
-    #a = np.array([0, 0, 1])
-    #b = XYZ_landmarks[landmark_dictionary.index("left pinky")] - XYZ_landmarks[landmark_dictionary.index("left index")]
-    #b = b * [1, 0, 1]
-    #dot = np.sum(a * b)
-    #a_norm = np.linalg.norm(a)
-    #b_norm = np.linalg.norm(b)
-    #cos = dot / (a_norm * b_norm)
-    #angle = np.degrees(np.arccos(cos))
-
-    return angle_j4
+    return angle_j5
 

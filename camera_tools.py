@@ -2,6 +2,7 @@ import depthai as dai
 import pyrealsense2 as rs
 import numpy as np
 import cv2
+import time
 
 def initialize_realsense_cam(rgb_size, depth_size):
     pipeline_rs = rs.pipeline()
@@ -65,6 +66,8 @@ def stream_rs(pipeline_rs, rsalign, rs_frame_queue):
         if rs_frame_queue.qsize() > 1:
             rs_frame_queue.get()
 
+        time.sleep(0.001)
+
 def stream_oak(pipeline_oak, oak_frame_queue):
     device_oak = dai.Device(pipeline_oak)
     rgb_queue_oak = device_oak.getOutputQueue(name="rgb", maxSize=2, blocking=False)
@@ -81,3 +84,5 @@ def stream_oak(pipeline_oak, oak_frame_queue):
 
         if oak_frame_queue.qsize() > 1:
             oak_frame_queue.get()
+
+        time.sleep(0.001)

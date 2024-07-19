@@ -80,7 +80,7 @@ arm_fuse_both = config["arm_landmark_detection"]["arm_to_fuse"]["both"]
 hand_detection_activation = config["hand_landmark_detection"]["is_enable"]
 hand_min_det_conf = config["hand_landmark_detection"]["min_detection_confidence"]
 hand_min_tracking_conf = config["hand_landmark_detection"]["min_tracking_confidence"]
-hand_visibility_threshold = config["hand_landmark_detection"]["visibility_threshold"]
+hand_min_presence_conf = config["hand_landmark_detection"]["min_presence_confidence"]
 hand_num_hand_detected = config["hand_landmark_detection"]["num_hand"]
 hand_model_path = config["hand_landmark_detection"]["model_asset_path"]
 hand_fuse_left = config["hand_landmark_detection"]["hand_to_fuse"]["left"]
@@ -94,6 +94,7 @@ debug_angle_j2 = config["debugging_mode"]["show_left_arm_angle_j2"]
 debug_angle_j3 = config["debugging_mode"]["show_left_arm_angle_j3"]
 debug_angle_j4 = config["debugging_mode"]["show_left_arm_angle_j4"]
 debug_angle_j5 = config["debugging_mode"]["show_left_arm_angle_j5"]
+debug_angle_j6 = config["debugging_mode"]["show_left_arm_angle_j6"]
 ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
@@ -115,6 +116,7 @@ hand_options = vision.HandLandmarkerOptions(
     running_mode=mp.tasks.vision.RunningMode.VIDEO,
     num_hands=hand_num_hand_detected,
     min_hand_detection_confidence=hand_min_det_conf,
+    min_hand_presence_confidence=hand_min_presence_conf,
     min_tracking_confidence=hand_min_tracking_conf)
 rs_hand_detector = vision.HandLandmarker.create_from_options(hand_options)
 oak_hand_detector = vision.HandLandmarker.create_from_options(hand_options)
@@ -186,6 +188,7 @@ if __name__ == "__main__":
             debug_angle_j3,
             debug_angle_j4,
             debug_angle_j5,
+            debug_angle_j6,
             draw_xyz,
             True,
             joint_vector_color,
@@ -198,10 +201,10 @@ if __name__ == "__main__":
 
     rs_thread.start()
     oak_thread.start()
-    if hand_detection_activation:
-        hand_landmark_detection_thread.start()
-    if arm_detection_activation:
-        arm_landmark_detection_thread.start()
+    #if hand_detection_activation:
+        #hand_landmark_detection_thread.start()
+    #if arm_detection_activation:
+        #arm_landmark_detection_thread.start()
     if plot_3d:
         vis_arm_thread.start()
         #vis_hand_thread.start()
@@ -233,8 +236,11 @@ if __name__ == "__main__":
         # SYNCHRONOUSLY PERFORM
         processed_rs_img = np.copy(opposite_rgb) 
         processed_oak_img = np.copy(rightside_rgb)
-        processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
-        processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
+        processed_rs_img = cv2.convertScaleAbs(processed_rs_img, alpha=1.0, beta=-50)
+        processed_oak_img = cv2.convertScaleAbs(processed_oak_img, alpha=1.0, beta=-50)
+        if frame_color_format == "bgr":
+            processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
+            processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
 
         mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
         mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
@@ -246,8 +252,11 @@ if __name__ == "__main__":
 
         processed_rs_img = np.copy(opposite_rgb) 
         processed_oak_img = np.copy(rightside_rgb)
-        processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
-        processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
+        processed_rs_img = cv2.convertScaleAbs(processed_rs_img, alpha=1.0, beta=-50)
+        processed_oak_img = cv2.convertScaleAbs(processed_oak_img, alpha=1.0, beta=-50)
+        if frame_color_format == "bgr":
+            processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
+            processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
 
         mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
         mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
