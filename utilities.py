@@ -4,7 +4,7 @@ import numpy as np
 import mediapipe as mp
 import time
 from functools import partial
-from scipy.optimize import minimize
+from scipy.optimize import minimize, Bounds
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.distance import euclidean
 
@@ -201,8 +201,8 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
             opposite_cam_intrinsic=opposite_cam_intrinsic,
             right_to_opposite_correctmat=right_to_opposite_correctmat)
         result = minimize(min_dis, 
-            x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]], 
-            options={"maxiters": 30})
+            tol=1e-1,
+            x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]])
         right_side_i_new_Z, opposite_i_new_Z = result.x
         right_side_new_Z.append(right_side_i_new_Z)
         opposite_new_Z.append(opposite_i_new_Z)

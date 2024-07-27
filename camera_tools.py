@@ -68,8 +68,12 @@ def stream_rs(pipeline_rs, rsalign, rs_frame_queue):
 
         time.sleep(0.001)
 
-def stream_oak(pipeline_oak, oak_frame_queue):
-    device_oak = dai.Device(pipeline_oak)
+def stream_oak(pipeline_oak, oak_frame_queue, mxid=None):
+    if mxid is not None:
+        device_info = dai.DeviceInfo(mxid) 
+        device_oak = dai.Device(pipeline_oak, device_info)
+    else:
+        device_oak = dai.Device(pipeline_oak)
     rgb_queue_oak = device_oak.getOutputQueue(name="rgb", maxSize=2, blocking=False)
     depth_queue_oak = device_oak.getOutputQueue(name="depth", maxSize=2, blocking=False)
 

@@ -40,20 +40,19 @@ from common import (load_data_from_npz_file,
     load_config,
     get_xyZ)
 
-
 # ------------------- READ CONFIG ------------------- 
 config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml") 
 config = load_config(config_file_path)
 
-realsense_rgb_size = (config["camera"]["realsense"]["rgb"]["width"], 
-    config["camera"]["realsense"]["rgb"]["height"])
-realsense_depth_size = (config["camera"]["realsense"]["depth"]["width"], 
-    config["camera"]["realsense"]["depth"]["height"]) 
-opposite_cam_calib_path = config["camera"]["realsense"]["opposite_camera_calibration_path"]
+left_oak_mxid = config["camera"]["left_camera"]["mxid"]
+left_oak_stereo_size = (config["camera"]["left_camera"]["stereo"]["width"], 
+    config["camera"]["left_camera"]["stereo"]["height"]) 
+left_cam_calib_path = config["camera"]["left_camera"]["left_camera_calibration_path"]
 
-oak_stereo_size = (config["camera"]["oak"]["stereo"]["width"], 
-    config["camera"]["oak"]["stereo"]["height"]) 
-rightside_cam_calib_path = config["camera"]["oak"]["rightside_camera_calibration_path"]
+right_oak_mxid = config["camera"]["right_camera"]["mxid"]
+right_oak_stereo_size = (config["camera"]["right_camera"]["stereo"]["width"], 
+    config["camera"]["right_camera"]["stereo"]["height"]) 
+right_cam_calib_path = config["camera"]["right_camera"]["right_camera_calibration_path"]
 
 frame_size = (config["process_frame"]["frame_size"]["width"], 
     config["process_frame"]["frame_size"]["height"])
@@ -99,14 +98,32 @@ ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
 # -------------------- GET TRANSFORMATION MATRIX -------------------- 
-oak_data = load_data_from_npz_file(rightside_cam_calib_path)
-rs_data = load_data_from_npz_file(opposite_cam_calib_path)
+right_cam_data = load_data_from_npz_file(right_cam_calib_path)
+left_cam_data = load_data_from_npz_file(left_cam_calib_path)
 
-oak_r_raw, oak_t_raw, oak_ins = oak_data['rvecs'], oak_data['tvecs'], oak_data['camMatrix']
-rs_r_raw, rs_t_raw, rs_ins = rs_data['rvecs'], rs_data['tvecs'], rs_data['camMatrix']
+right_oak_r_raw, right_oak_t_raw, right_oak_ins = right_cam_data['rvecs'], right_cam_data['tvecs'], right_cam_data['camMatrix']
+left_oak_r_raw, left_oak_t_raw, left_oak_ins = left_cam_data['rvecs'], left_cam_data['tvecs'], left_cam_data['camMatrix']
 
-oak_2_rs_mat_avg = get_oak_2_rs_matrix(oak_r_raw, oak_t_raw, 
-    rs_r_raw, rs_t_raw)
+def _scale_intrinsic_by_res(intrinsic, original_size, processed_size):
+    """
+    Default camera's resolution is different with processing resolution. Therefore,
+    we need another intrinsic that is compatible with the processing resolution.
+    """
+    original_h, original_w = original_size
+    processed_h, processed_w = processed_size
+    scale_w = processed_w / original_w
+    scale_h = processed_h / original_h
+    intrinsic[0, :] = intrinsic[0, :] * scale_w
+    intrinsic[1, :] = intrinsic[1, :] * scale_h
+
+    return intrinsic
+
+original_size = (1080, 1920)
+right_oak_ins = _scale_intrinsic_by_res(right_oak_ins, original_size, frame_size[::-1])
+left_oak_ins = _scale_intrinsic_by_res(left_oak_ins, original_size, frame_size[::-1])
+
+right_2_left_mat_avg = get_oak_2_rs_matrix(right_oak_r_raw, right_oak_t_raw, 
+    left_oak_r_raw, left_oak_t_raw)
 
 # -------------------- INIT MEDIAPIPE MODELS -------------------- 
 hand_base_options = python.BaseOptions(model_asset_path=hand_model_path,
@@ -155,14 +172,13 @@ arm_hand_fused_names = landmarks_name_want_to_get.copy()
 arm_hand_fused_names.extend(hand_landmarks_name) 
 
 if __name__ == "__main__":
-    pipeline_rs, rsalign = initialize_realsense_cam(realsense_rgb_size, realsense_depth_size)
-    pipeline_oak = initialize_oak_cam(oak_stereo_size)
+    pipeline_left_oak = initialize_oak_cam(left_oak_stereo_size)
+    pipeline_right_oak = initialize_oak_cam(right_oak_stereo_size)
 
-    rs_thread = threading.Thread(target=stream_rs, args=(pipeline_rs, rsalign, 
-        opposite_frame_getter_queue,), daemon=True)
-
-    oak_thread = threading.Thread(target=stream_oak, args=(pipeline_oak,  
-        rightside_frame_getter_queue,), daemon=True)
+    left_oak_thread = threading.Thread(target=stream_oak, args=(pipeline_left_oak,  
+        opposite_frame_getter_queue, left_oak_mxid), daemon=True)
+    right_oak_thread = threading.Thread(target=stream_oak, args=(pipeline_right_oak,  
+        rightside_frame_getter_queue, right_oak_mxid), daemon=True)
 
     hand_landmark_detection_thread = threading.Thread(target=detect_hand_landmarks, 
         args=(rs_hand_detector, 
@@ -199,8 +215,8 @@ if __name__ == "__main__":
         args=(hand_points_vis_queue,),
         daemon=True)
 
-    rs_thread.start()
-    oak_thread.start()
+    left_oak_thread.start()
+    right_oak_thread.start()
     #if hand_detection_activation:
         #hand_landmark_detection_thread.start()
     #if arm_detection_activation:
@@ -270,36 +286,7 @@ if __name__ == "__main__":
         rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks)
         opposite_rgb = draw_hand_landmarks_on_image(opposite_rgb, rs_hand_landmarks, rs_handedness)
         rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks, oak_handedness)
-        
-        # 2.1. Detect arm landmarks
-        #arm_landmark_input_queue.put((np.copy(opposite_rgb), np.copy(rightside_rgb), timestamp))
-        #if arm_landmark_input_queue.qsize() > 1:
-            #arm_landmark_input_queue.get()
 
-        ## 2.2. Detect hand landmarks
-        #hand_landmark_input_queue.put((np.copy(opposite_rgb), np.copy(rightside_rgb), timestamp))
-        #if hand_landmark_input_queue.qsize() > 1:
-            #hand_landmark_input_queue.get()
-
-
-        ### --------------- WAITING FOR THE MODELS TO PROCESS --------------- 
-        #time.sleep(0.001)
-
-        #if not hand_landmark_detection_result_queue.empty():
-            #rs_hand_landmarks_result, oak_hand_landmarks_result = hand_landmark_detection_result_queue.get()
-            #rs_hand_landmarks, rs_handedness = get_normalized_hand_landmarks(rs_hand_landmarks_result)
-            #oak_hand_landmarks, oak_handedness = get_normalized_hand_landmarks(oak_hand_landmarks_result)
-            #opposite_rgb = draw_hand_landmarks_on_image(opposite_rgb, rs_hand_landmarks, rs_handedness)
-            #rightside_rgb = draw_hand_landmarks_on_image(rightside_rgb, oak_hand_landmarks, oak_handedness)
-
-        #if not arm_landmark_detection_result_queue.empty():
-            #rs_arm_landmarks_result, oak_arm_landmarks_result = arm_landmark_detection_result_queue.get()
-            #rs_arm_landmarks = get_normalized_pose_landmarks(rs_arm_landmarks_result)
-            #oak_arm_landmarks = get_normalized_pose_landmarks(oak_arm_landmarks_result)
-            #opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks)
-            #rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks)
-
-        # Should perform in another thread
         if rs_arm_landmarks and oak_arm_landmarks:
             if arm_num_pose_detected == 1:
                 rs_arm_landmarks = rs_arm_landmarks[0]
@@ -327,9 +314,9 @@ if __name__ == "__main__":
                 len(oak_arm_xyZ) > 0):
                 arm_fused_XYZ = fuse_landmarks_from_two_cameras(rs_arm_xyZ,  # shape: (N, 3)
                     oak_arm_xyZ,  
-                    oak_ins,
-                    rs_ins,
-                    oak_2_rs_mat_avg) 
+                    right_oak_ins,
+                    left_oak_ins,
+                    right_2_left_mat_avg) 
 
         if (rs_hand_landmarks and 
             rs_handedness and 
@@ -365,9 +352,9 @@ if __name__ == "__main__":
                 len(oak_hand_xyZ) > 0):
                 hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_hand_xyZ,  # shape: (21, 3) for single hand
                     oak_hand_xyZ,
-                    oak_ins,
-                    rs_ins,
-                    oak_2_rs_mat_avg)       
+                    right_oak_ins,
+                    left_oak_ins,
+                    right_2_left_mat_avg)       
 
         if (arm_fused_XYZ is not None and 
             hand_fused_XYZ is not None):
@@ -385,7 +372,7 @@ if __name__ == "__main__":
                 arm_points_vis_queue.put(arm_hand_XYZ_wrt_shoulder)
                 if arm_points_vis_queue.qsize() > 1:
                     arm_points_vis_queue.get()
-                ##hand_points_vis_queue.put(hand_XYZ_wrt_wrist)
+                #hand_points_vis_queue.put(hand_XYZ_wrt_wrist)
 
         frame_count += 1
         elapsed_time = time.time() - start_time
@@ -406,5 +393,4 @@ if __name__ == "__main__":
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             cv2.destroyAllWindows()
-            pipeline_rs.stop()
             break

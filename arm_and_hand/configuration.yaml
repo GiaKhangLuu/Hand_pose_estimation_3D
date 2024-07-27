@@ -1,25 +1,24 @@
 camera:
-  realsense:
-    rgb:
-      width: 1280
-      height: 720
-    depth:
-      width: 640
-      height: 360
-    opposite_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/rs_calibration.npz
-  oak:
+  left_camera:
+    mxid: "18443010E13D641200"
     stereo: 
       width: 640
       height: 360
-    rightside_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/oak_calibration.npz
+    left_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/rs_calibration.npz
+  right_camera:
+    mxid: "18443010613E940F00"
+    stereo: 
+      width: 640
+      height: 360
+    right_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/oak_calibration.npz
 
 process_frame:
   frame_color_format: bgr
   frame_size:  # the higher resolution is, the futher distance which can be processed by the system
-    width: 960
-    height: 540
+    width: 640
+    height: 360
   depth_smoothing:
-    sliding_window_size: 21          # Diameter of each pixel neighborhood
+    sliding_window_size: 9           # Diameter of each pixel neighborhood
     sigma_color: 25                  # Filter sigma in the color space for bilateral
     sigma_space: 25                  # Filter sigma in the coordinate space for bilateral
 
@@ -35,7 +34,7 @@ debugging_mode:
   show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
   show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
   show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
-  show_left_arm_angle_j6: true       # Plotting left arm joint 6 and its reference vector to debug (visualize)
+  show_left_arm_angle_j6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
   ref_vector_color: 
     - 1
     - 0
