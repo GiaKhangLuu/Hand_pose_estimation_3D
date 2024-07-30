@@ -79,8 +79,8 @@ left_oak_thread.start()
 right_oak_thread.start()
 
 folder_path = './images'
-rs_path = './images/rs'
-oak_path = './images/oak'
+rs_path = './images/left_oak'
+oak_path = './images/right_oak'
 
 
 if os.path.exists(folder_path):
@@ -101,18 +101,18 @@ while True:
     if (not left_oak_queue.empty()) and (not right_oak_queue.empty()):
         #rs_frame = rs_queue.get()
         left_frame = left_oak_queue.get()
-        cv2.imshow("RealSense Combined", left_frame)
+        cv2.imshow("Left OAK Combined", left_frame)
         
         right_frame = right_oak_queue.get()
-        cv2.imshow("OAK-D Combined", right_frame)
+        cv2.imshow("Right OAK Combined", right_frame)
 
     k = cv2.waitKey(5)
 
     if k == 27:
         break
     elif k == ord('s'): # wait for 's' key to save and exit
-        cv2.imwrite('{}/rs_img_'.format(rs_path) + str(num) + '.png', left_frame)
-        cv2.imwrite('{}/oak_img_'.format(oak_path) + str(num) + '.png', right_frame)
+        cv2.imwrite('{}/left_oak_img_'.format(rs_path) + str(num) + '.png', left_frame)
+        cv2.imwrite('{}/right_oak_img_'.format(oak_path) + str(num) + '.png', right_frame)
         print("image saved!")
         num += 1
 

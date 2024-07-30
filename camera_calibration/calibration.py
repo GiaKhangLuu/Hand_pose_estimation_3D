@@ -79,7 +79,7 @@ if __name__ == "__main__":
     termCriteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
     masks = []
     
-    for i, cam in enumerate(['rs', 'oak']):
+    for i, cam in enumerate(['left_oak', 'right_oak']):
         #root = os.getcwd()
         #calibrationDir = os.path.join(root, 'images', cam)
         #runCalibration(cam)
@@ -109,6 +109,6 @@ if __name__ == "__main__":
 
     masks = (np.array(masks[0]) & np.array(masks[1])).tolist()
 
-    for i, cam in enumerate(['rs', 'oak']):
+    for i, cam in enumerate(['left_oak', 'right_oak']):
         runCalibration(cam, masks)
 
