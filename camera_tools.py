@@ -85,6 +85,7 @@ def stream_oak(pipeline_oak, oak_frame_queue, mxid=None):
         depth_oak = depth_frame_oak.getFrame()
 
         oak_frame_queue.put((frame_oak, depth_oak))
+        #oak_frame_queue.put(frame_oak)
 
         if oak_frame_queue.qsize() > 1:
             oak_frame_queue.get()

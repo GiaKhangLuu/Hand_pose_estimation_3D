@@ -10,17 +10,13 @@ camera:
     stereo: 
       width: 640
       height: 360
-    right_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/oak_calibration.npz
+    right_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/right_oak_calibration.npz
 
 process_frame:
   frame_color_format: bgr
   frame_size:  # the higher resolution is, the futher distance which can be processed by the system
-    width: 640
-    height: 360
-  depth_smoothing:
-    sliding_window_size: 9           # Diameter of each pixel neighborhood
-    sigma_color: 25                  # Filter sigma in the color space for bilateral
-    sigma_space: 25                  # Filter sigma in the coordinate space for bilateral
+    width: 1920
+    height: 1080
 
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
@@ -28,8 +24,8 @@ utilities:
   save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
 
 debugging_mode:
-  draw_xyz: false
-  show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+  draw_xyz: true
+  show_left_arm_angle_j1: true       # Plotting left arm joint 1 and its reference vector to debug (visualize)
   show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
   show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
   show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
