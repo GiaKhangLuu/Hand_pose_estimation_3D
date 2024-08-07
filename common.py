@@ -43,9 +43,10 @@ def get_oak_2_rs_matrix(oak_r_raw, oak_t_raw,
     return oak_2_rs_mat_avg
 
 def unnormalize(arr: NDArray, frame_size) -> NDArray:
-    arr = arr[:, :-1]
+    #arr = arr[:, :-1]
     arr[:, 0] = arr[:, 0] * frame_size[0]
     arr[:, 1] = arr[:, 1] * frame_size[1]
+    arr[:, 2] = arr[:, 2] * frame_size[0]
 
     """
     Note: some landmarks have value > or < window_height and window_width,
@@ -79,7 +80,7 @@ def get_depth(positions: NDArray, depth: NDArray, sliding_window_size) -> NDArra
 
     return np.array(z_landmarks)
 
-def get_xyZ(landmarks, depth, frame_size, sliding_window_size, landmark_ids_to_get=None, visibility_threshold=None):
+def get_xyZ(landmarks, frame_size, landmark_ids_to_get=None, visibility_threshold=None):
     """
     Input:
         landmark_ids_to_get = None means get all landmarks
@@ -87,8 +88,6 @@ def get_xyZ(landmarks, depth, frame_size, sliding_window_size, landmark_ids_to_g
     Output:
         xyZ: shape = (N, 3) where N is the num. of landmarks want to get
     """
-
-    assert depth is not None
 
     if isinstance(landmark_ids_to_get, int):
         landmark_ids_to_get = [landmark_ids_to_get]
@@ -111,11 +110,10 @@ def get_xyZ(landmarks, depth, frame_size, sliding_window_size, landmark_ids_to_g
                 y = landmark.y
                 z = landmark.z
                 xyz.append([x, y, z])
+
     if not len(xyz):
         return None
 
     xyz = np.array(xyz)
-    xy_unnorm = unnormalize(xyz, frame_size)
-    Z = get_depth(xy_unnorm, depth, sliding_window_size)
-    xyZ = np.concatenate([xy_unnorm, Z[:, None]], axis=-1)
-    return xyZ
+    xyz_unnorm = unnormalize(xyz, frame_size)
+    return xyz_unnorm

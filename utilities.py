@@ -14,11 +14,6 @@ from typing import Tuple, List
 from mediapipe.framework.formats import landmark_pb2
 import numpy as np
 
-def filter_depth(depth_array: NDArray, sliding_window_size, sigma_color, sigma_space) -> NDArray:
-    depth_array = depth_array.astype(np.float32)
-    depth_array = cv2.bilateralFilter(depth_array, sliding_window_size, sigma_color, sigma_space)
-    return depth_array
-
 def detect_arm_landmarks(rs_detector, oak_detector, input_queue, result_queue, image_format="bgr"):
     while True:
         if not input_queue.empty():
@@ -101,6 +96,53 @@ def get_normalized_and_world_pose_landmarks(detection_result):
         pose_landmarks_proto_list.append(pose_landmarks_proto)
 
     return pose_landmarks_proto_list, pose_world_landmarks_proto_list
+
+def get_normalized_pose_landmarks(detection_result):
+    pose_landmarks_list = detection_result.pose_landmarks
+    pose_world_landmarks_list = detection_result.pose_world_landmarks
+    pose_landmarks_proto_list = []
+    pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
+
+    # Loop through the detected poses to visualize.
+    for idx in range(len(pose_landmarks_list)):
+        pose_landmarks = pose_landmarks_list[idx]
+        pose_world_landmarks = pose_world_landmarks_list[idx]
+
+        pose_landmarks_proto.landmark.extend([
+            landmark_pb2.NormalizedLandmark(x=landmark.x, 
+                                            y=landmark.y, 
+                                            z=landmark.z,
+                                            visibility=landmark.visibility) 
+                                            for landmark in pose_landmarks
+        ])
+
+        pose_landmarks_proto_list.append(pose_landmarks_proto)
+
+    return pose_landmarks_proto_list 
+
+def get_normalized_hand_landmarks(detection_result):
+    hand_landmarks_list = detection_result.hand_landmarks
+    hand_world_landmarks_list = detection_result.hand_world_landmarks
+    handedness_list = detection_result.handedness
+    hand_landmarks_proto_list = []
+    hand_info_list = []
+
+    for idx in range(len(hand_landmarks_list)):
+        hand_landmarks = hand_landmarks_list[idx]
+        hand_world_landmarks = hand_world_landmarks_list[idx]
+        handedness = handedness_list[idx]
+
+        hand_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
+        hand_landmarks_proto.landmark.extend([
+			landmark_pb2.NormalizedLandmark(
+				x=landmark.x, 
+				y=landmark.y, 
+				z=landmark.z) for landmark in hand_landmarks])
+        
+        hand_landmarks_proto_list.append(hand_landmarks_proto)
+        hand_info_list.append(handedness[0].category_name)
+
+    return hand_landmarks_proto_list, hand_info_list
 
 def get_normalized_and_world_hand_landmarks(detection_result):
     hand_landmarks_list = detection_result.hand_landmarks
@@ -225,7 +267,7 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
             opposite_cam_intrinsic=opposite_cam_intrinsic,
             right_to_opposite_correctmat=right_to_opposite_correctmat)
         result = minimize(min_dis, 
-            tol=1e-1,
+            tol=1e-3,
             x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]])
         right_side_i_new_Z, opposite_i_new_Z = result.x
         right_side_new_Z.append(right_side_i_new_Z)
@@ -351,3 +393,82 @@ def get_mediapipe_world_landmarks(landmarks, meters_to_millimeters=True, landmar
     if meters_to_millimeters:
         XYZ = XYZ * 1000
     return XYZ
+
+def unnormalize(arr: NDArray, frame_size) -> NDArray:
+    arr = arr[:, :-1]
+    arr[:, 0] = arr[:, 0] * frame_size[0]
+    arr[:, 1] = arr[:, 1] * frame_size[1]
+
+    """
+    Note: some landmarks have value > or < window_height and window_width,
+        so this will cause the depth_image out of bound. For now, we just
+        clip in in the range of window's dimension. But those values
+        properly be removed from the list.
+    """
+
+    arr[:, 0] = np.clip(arr[:, 0], 0, frame_size[0] - 1)
+    arr[:, 1] = np.clip(arr[:, 1], 0, frame_size[1] - 1)
+    return arr
+
+def get_depth(positions: NDArray, depth: NDArray, sliding_window_size) -> NDArray:
+    half_size = sliding_window_size // 2
+    positions = positions.astype(np.int32)
+
+    x_min = np.maximum(0, positions[:, 0] - half_size)
+    x_max = np.minimum(depth.shape[1] - 1, positions[:, 0] + half_size)
+    y_min = np.maximum(0, positions[:, 1] - half_size)
+    y_max = np.minimum(depth.shape[0] - 1, positions[:, 1] + half_size)
+
+    xy_windows = np.concatenate([x_min[:, None], x_max[:, None], y_min[:, None], y_max[:, None]], axis=-1)
+
+    z_landmarks = []
+    for i in range(xy_windows.shape[0]):
+        z_values = depth[xy_windows[i, 2]:xy_windows[i, 3] + 1, xy_windows[i, 0]:xy_windows[i, 1] + 1]
+        mask = z_values > 0
+        z_values = z_values[mask]
+        z_median = np.median(z_values)
+        z_median = 0 if np.isnan(z_median) else z_median
+        z_landmarks.append(z_median)
+
+    return np.array(z_landmarks)
+
+def get_xyZ(landmarks, depth, frame_size, sliding_window_size, landmark_ids_to_get=None, visibility_threshold=None):
+    """
+    Input:
+        landmark_ids_to_get = None means get all landmarks
+        visibility_threshold = None means we dont consider checking visibility
+    Output:
+        xyZ: shape = (N, 3) where N is the num. of landmarks want to get
+    """
+
+    assert depth is not None
+
+    if isinstance(landmark_ids_to_get, int):
+        landmark_ids_to_get = [landmark_ids_to_get]
+
+    xyz = []
+    if landmark_ids_to_get is None:
+        for landmark in landmarks.landmark:
+            if (visibility_threshold is None or 
+                landmark.visibility > visibility_threshold):
+                x = landmark.x
+                y = landmark.y
+                z = landmark.z
+                xyz.append([x, y, z])
+    else:
+        for landmark_id in landmark_ids_to_get:
+            landmark = landmarks.landmark[landmark_id]
+            if (visibility_threshold is None or
+                landmark.visibility > visibility_threshold):
+                x = landmark.x
+                y = landmark.y
+                z = landmark.z
+                xyz.append([x, y, z])
+    if not len(xyz):
+        return None
+
+    xyz = np.array(xyz)
+    xy_unnorm = unnormalize(xyz, frame_size)
+    Z = get_depth(xy_unnorm, depth, sliding_window_size)
+    xyZ = np.concatenate([xy_unnorm, Z[:, None]], axis=-1)
+    return xyZ

@@ -2,14 +2,14 @@ camera:
   left_camera:
     mxid: "18443010E13D641200"
     stereo: 
-      width: 640
-      height: 360
-    left_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/rs_calibration.npz
+      width: 1920
+      height: 1080
+    left_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/left_oak_calibration.npz
   right_camera:
     mxid: "18443010613E940F00"
     stereo: 
-      width: 640
-      height: 360
+      width: 1920
+      height: 1080
     right_camera_calibration_path: /home/giakhang/dev/Hand_pose_estimation_3D/camera_calibration/right_oak_calibration.npz
 
 process_frame:
@@ -25,8 +25,8 @@ utilities:
 
 debugging_mode:
   draw_xyz: true
-  show_left_arm_angle_j1: true       # Plotting left arm joint 1 and its reference vector to debug (visualize)
-  show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
+  show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+  show_left_arm_angle_j2: true       # Plotting left arm joint 2 and its reference vector to debug (visualize)
   show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
   show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
   show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
@@ -84,7 +84,7 @@ arm_landmark_detection:
   min_tracking_confidence: 0.5
   visibility_threshold: 0.2
   num_pose: 1
-  model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/pose_landmarker_full.task
+  model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/pose_landmarker_lite.task
   pose_landmarks:
     - nose
     - left eye (inner)

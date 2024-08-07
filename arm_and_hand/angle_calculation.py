@@ -52,7 +52,7 @@ def calculate_rotation_matrix_to_compute_angle_of_j1_and_j2(XYZ_landmarks, landm
         XYZ_landmarks.shape = (M, N), M = (9 for arm) + (21 for hand)), N = 3 = #features
         XYZ_origin = (N, O), N = 3 = #features, O = #vectors (xyz)
     Return:
-        shoulder_coords_in_world = ()
+        shoulder_coords_in_world = (N, O), N = 3 = #features, O = #vectors (xyz)
     """
     x_shoulder =  XYZ_landmarks[landmark_dictionary.index("left elbow")] * -1
     y_unit, z_unit = XYZ_origin[:, 1], XYZ_origin[:, 2]
@@ -216,7 +216,7 @@ def get_angles_between_joints(XYZ_landmarks, landmark_dictionary, original_xyz):
     """
     Input:
         XYZ_landmarks.shape = (M, N), M = (9 for arm) + (21 for hand)), N = 3 = #features
-        XYZ_origin = (N, O), N = 3 = #features, O = #vectors (xyz)
+        original_xyz = (N, O), N = 3 = #features, O = #vectors (xyz)
     """
 
     # Joint 1 and Joint 2
