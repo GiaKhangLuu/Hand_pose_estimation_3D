@@ -14,13 +14,14 @@ from angle_calculation import (calculate_angle_j1,
     calculate_angle_j2,
     calculate_angle_j3,
     calculate_angle_j4,
-    calculate_rotation_matrix_to_compute_angle_of_j3_and_j4,
-    calculate_elbow_coords,
-    calculate_wrist_coords,
-    calculate_wrist_coords_in_elbow,
     calculate_angle_j5,
     calculate_angle_j6,
-    calculate_rotation_matrix_to_compute_angle_of_j1_and_j2)
+    calculate_rotation_matrix_to_compute_angle_of_j1_and_j2,
+    calculate_elbow_coordinate_wrt_origin,
+    calculate_elbow_coordinate_wrt_shoulder,
+    calculate_elbow_coords,
+    calculate_wrist_coords,
+    calculate_wrist_coords_in_elbow)
 
 def visualize_arm(lmks_queue,
     landmark_dictionary, 
@@ -59,14 +60,15 @@ def visualize_arm(lmks_queue,
         if not lmks_queue.empty():
             pts, original_xyz = lmks_queue.get()  # pts.shape = (M, N), M = #vectors = 21, N = #features = 3. original_xyz.shape = (N, O), N = #features = 3, O = #vectors = 3 (xyz)
             if visualize_with_hand:
-                lines = [[0, 1], [1, 9], [0, 6], [0, 7], [6, 8], [7, 8],
-                    [9, 10], [9, 14], [18, 22], [22, 26], [14, 18], [9, 26],
-                    [10, 11], [11, 12], [12, 13],
-                    [14, 15], [15, 16], [16, 17], 
-                    [18, 19], [19, 20], [20, 21], 
-                    [22, 23], [23, 24], [24, 25],
-                    [26, 27], [27, 28], [28, 29]]
+                lines = [[0, 1], [1, 5], [0, 2], [0, 3], [2, 4], 
+                    [3, 4], [5, 6], [5, 10], [14, 18], [18, 22], 
+                    [10, 14], [5, 22], [6, 7], [7, 8], [8, 9], 
+                    [10, 11], [11, 12], [12, 13], [14, 15], [15, 16], 
+                    [16, 17], [18, 19], [19, 20], [20, 21], [22, 23], 
+                    [23, 24], [24, 25]]
             else:
+                # For now, we dont get wrist, pinky, index and thumb landmark from POSE LANDMARKS DETECTION => We are not
+                # able to draw without HAND DETECTION
                 lines = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 5], [3, 4],
                     [0, 6], [0, 7],
                     [6, 8], [7, 8]]
@@ -81,8 +83,11 @@ def visualize_arm(lmks_queue,
                 lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
                 colors.extend([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
 
+            shoulder_coords_in_world = calculate_rotation_matrix_to_compute_angle_of_j1_and_j2(pts, landmark_dictionary, original_xyz)
+            elbow_coordinate_wrt_origin = calculate_elbow_coordinate_wrt_origin(pts,
+                landmark_dictionary, shoulder_coords_in_world)  # (3, O), O = number of vectors (xyz)
+
             if show_left_arm_j1 or show_left_arm_j2:
-                shoulder_coords_in_world = calculate_rotation_matrix_to_compute_angle_of_j1_and_j2(pts, landmark_dictionary, original_xyz)
                 x_shoulder, y_shoulder, z_shoulder = shoulder_coords_in_world[:, 0],  shoulder_coords_in_world[:, 1], shoulder_coords_in_world[:, 2]
                 shoulder_coords_in_world_rot_mat = R.from_matrix(shoulder_coords_in_world)
 
@@ -93,44 +98,64 @@ def visualize_arm(lmks_queue,
 
                 if show_left_arm_j1:
                     angle_j1 = calculate_angle_j1(shoulder_coords_in_world_rot_mat)
-                    print("----------")
-                    print("Angle j1: ", angle_j1)
+                    #print("----------")
+                    #print("Angle j1: ", angle_j1)
                 if show_left_arm_j2:
                     angle_j2 = calculate_angle_j2(shoulder_coords_in_world_rot_mat)
+                    #print("----------")
+                    #print("Angle j2: ", angle_j2)
+
+            if show_left_arm_j3 or show_left_arm_j4:
+                x_elbow, y_elbow, z_elbow = elbow_coordinate_wrt_origin[:, 0], elbow_coordinate_wrt_origin[:, 1], elbow_coordinate_wrt_origin[:, 2]
+                elbow_coordinate_wrt_shoulder = calculate_elbow_coordinate_wrt_shoulder(shoulder_coords_in_world,
+                    elbow_coordinate_wrt_origin)  # (3, O), O = number of vectors (xyz)
+                elbow_coordinate_wrt_shoulder_rot_mat = R.from_matrix(elbow_coordinate_wrt_shoulder)               
+
+                pts = np.concatenate([pts, [x_elbow * 40, y_elbow * 40, z_elbow * 40]], axis=0)
+                last_index = pts.shape[0] - 1
+                lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
+                colors.extend([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
+
+                if show_left_arm_j3:
+                    angle_j3 = calculate_angle_j3(elbow_coordinate_wrt_shoulder_rot_mat)
+                    #print("----------")
+                    #print("Angle j3: ", angle_j3)
+                if show_left_arm_j4:
+                    angle_j4 = calculate_angle_j4(elbow_coordinate_wrt_shoulder_rot_mat)
                     print("----------")
-                    print("Angle j2: ", angle_j2)
+                    print("Angle j4: ", angle_j4)
             
-            if show_left_arm_j3:  # Debugging calculating joint 3
-                _, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
-                _, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
-                shoulder_rot_mat, shoulder_rot_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
-                a, b, angle_j3 = calculate_angle_j3(pts, shoulder_rot_mat, shoulder_rot_mat_inv, landmark_dictionary)
+            #if show_left_arm_j3:  # Debugging calculating joint 3
+                #_, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
+                #_, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
+                #shoulder_rot_mat, shoulder_rot_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
+                #a, b, angle_j3 = calculate_angle_j3(pts, shoulder_rot_mat, shoulder_rot_mat_inv, landmark_dictionary)
 
-                b_in_original_coor = np.matmul(shoulder_rot_mat, b.T)
-                b_in_original_coor = b_in_original_coor.T
-                a_in_original_coor = np.matmul(shoulder_rot_mat, a.T)
-                a_in_original_coor = a_in_original_coor.T
+                #b_in_original_coor = np.matmul(shoulder_rot_mat, b.T)
+                #b_in_original_coor = b_in_original_coor.T
+                #a_in_original_coor = np.matmul(shoulder_rot_mat, a.T)
+                #a_in_original_coor = a_in_original_coor.T
 
-                pts = np.concatenate([pts, [b_in_original_coor, a_in_original_coor * 20]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[0, last_index - 1], [0, last_index]])
-                colors.extend([joint_vector_color, ref_vector_color])
+                #pts = np.concatenate([pts, [b_in_original_coor, a_in_original_coor * 20]], axis=0)
+                #last_index = pts.shape[0] - 1
+                #lines.extend([[0, last_index - 1], [0, last_index]])
+                #colors.extend([joint_vector_color, ref_vector_color])
 
-            if show_left_arm_j4: # Debugging calculating joint 4
-                _, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
-                _, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
-                shoulder_rot_mat, shoulder_rot_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
-                a, b, _ = calculate_angle_j4(pts, shoulder_rot_mat, shoulder_rot_mat_inv, landmark_dictionary)
+            #if show_left_arm_j4: # Debugging calculating joint 4
+                #_, _, angle_j1 = calculate_angle_j1(pts, landmark_dictionary)
+                #_, _, angle_j2 = calculate_angle_j2(pts, landmark_dictionary)
+                #shoulder_rot_mat, shoulder_rot_mat_inv = calculate_rotation_matrix_to_compute_angle_of_j3_and_j4(pts, angle_j1, angle_j2, landmark_dictionary)
+                #a, b, _ = calculate_angle_j4(pts, shoulder_rot_mat, shoulder_rot_mat_inv, landmark_dictionary)
 
-                b_in_original_coor = np.matmul(shoulder_rot_mat, b.T)
-                b_in_original_coor = b_in_original_coor.T
-                a_in_original_coor = np.matmul(shoulder_rot_mat, a.T)
-                a_in_original_coor = a_in_original_coor.T
+                #b_in_original_coor = np.matmul(shoulder_rot_mat, b.T)
+                #b_in_original_coor = b_in_original_coor.T
+                #a_in_original_coor = np.matmul(shoulder_rot_mat, a.T)
+                #a_in_original_coor = a_in_original_coor.T
 
-                pts = np.concatenate([pts, [b_in_original_coor, a_in_original_coor * 20]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[0, last_index - 1], [0, last_index]])
-                colors.extend([joint_vector_color, ref_vector_color])
+                #pts = np.concatenate([pts, [b_in_original_coor, a_in_original_coor * 20]], axis=0)
+                #last_index = pts.shape[0] - 1
+                #lines.extend([[0, last_index - 1], [0, last_index]])
+                #colors.extend([joint_vector_color, ref_vector_color])
 
             if show_left_arm_j5:  # Debugging calculating joint 5
                 # Joint 1 and Joint 2

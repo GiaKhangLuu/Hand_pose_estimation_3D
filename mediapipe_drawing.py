@@ -12,6 +12,8 @@ HANDEDNESS_TEXT_COLOR = (88, 205, 54) # vibrant green
 def draw_arm_landmarks_on_image(rgb_image, 
 	pose_landmarks_proto_list: List[landmark_pb2.NormalizedLandmarkList]):
 	annotated_image = np.copy(rgb_image)
+	if pose_landmarks_proto_list is None:
+		return annotated_image
 
 	# Loop through the detected poses to visualize.
 	for pose_landmarks_proto in pose_landmarks_proto_list:
@@ -26,6 +28,8 @@ def draw_hand_landmarks_on_image(rgb_image,
 	hand_landmarks_proto_list: List[landmark_pb2.NormalizedLandmark],
 	handedness: List):
 	annotated_image = np.copy(rgb_image)
+	if hand_landmarks_proto_list is None or handedness is None:
+		return annotated_image
 
 	# Loop through the detected hands to visualize.
 	for hand, hand_landmarks_proto in zip(handedness, hand_landmarks_proto_list):

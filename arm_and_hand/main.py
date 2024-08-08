@@ -201,22 +201,21 @@ if __name__ == "__main__":
     start_time = time.time()
     fps = 0
 
-    kalman_filters = []
-    num_landmarks = 30
-    for i in range(len(arm_hand_fused_names)):
-        f = KalmanFilter(dim_x=3, dim_z=3)
-        initial_state = np.zeros(3)
-        state_transition_mat = np.eye(3)
-        measurement_func = np.eye(3)
-        measurement_noise = np.eye(3) * 0.05
-        process_noise = [0.005] * 3
-        f.x = initial_state
-        f.F = state_transition_mat
-        f.H = measurement_func
-        f.P *= 0.01
-        f.R = measurement_noise
-        f.Q = process_noise
-        kalman_filters.append(f)
+    #kalman_filters = []
+    #for i in range(len(arm_hand_fused_names)):
+        #f = KalmanFilter(dim_x=3, dim_z=3)
+        #initial_state = np.zeros(3)
+        #state_transition_mat = np.eye(3)
+        #measurement_func = np.eye(3)
+        #measurement_noise = np.eye(3) * 0.001
+        #process_noise = [0.001] * 3
+        #f.x = initial_state
+        #f.F = state_transition_mat
+        #f.H = measurement_func
+        #f.P *= 1
+        #f.R = measurement_noise
+        #f.Q = process_noise
+        #kalman_filters.append(f)
 
     while True:
         rs_hand_landmarks, rs_handedness = None, None
@@ -232,34 +231,34 @@ if __name__ == "__main__":
         opposite_rgb = cv2.resize(opposite_rgb, frame_size)
         rightside_rgb = cv2.resize(rightside_rgb, frame_size)
 
-        # SYNCHRONOUSLY PERFORM
-        processed_rs_img = np.copy(opposite_rgb) 
-        processed_oak_img = np.copy(rightside_rgb)
-        if frame_color_format == "bgr":
-            processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
-            processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
+        if arm_detection_activation:
+            processed_rs_img = np.copy(opposite_rgb) 
+            processed_oak_img = np.copy(rightside_rgb)
+            if frame_color_format == "bgr":
+                processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
+                processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
 
-        mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
-        mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
+            mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
+            mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
 
-        rs_arm_result = rs_arm_detector.detect_for_video(mp_rs_image, timestamp)
-        oak_arm_result = oak_arm_detector.detect_for_video(mp_oak_image, timestamp)
-        rs_arm_landmarks = get_normalized_pose_landmarks(rs_arm_result)
-        oak_arm_landmarks = get_normalized_pose_landmarks(oak_arm_result)
+            rs_arm_result = rs_arm_detector.detect_for_video(mp_rs_image, timestamp)
+            oak_arm_result = oak_arm_detector.detect_for_video(mp_oak_image, timestamp)
+            rs_arm_landmarks = get_normalized_pose_landmarks(rs_arm_result)
+            oak_arm_landmarks = get_normalized_pose_landmarks(oak_arm_result)
 
-        processed_rs_img = np.copy(opposite_rgb) 
-        processed_oak_img = np.copy(rightside_rgb)
-        if frame_color_format == "bgr":
-            processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
-            processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
+        if hand_detection_activation:
+            processed_rs_img = np.copy(opposite_rgb) 
+            processed_oak_img = np.copy(rightside_rgb)
+            if frame_color_format == "bgr":
+                processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
+                processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
+            mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
+            mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
 
-        mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
-        mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
-
-        rs_hand_result = rs_hand_detector.detect_for_video(mp_rs_image, timestamp)
-        oak_hand_result = oak_hand_detector.detect_for_video(mp_oak_image, timestamp)
-        rs_hand_landmarks, rs_handedness = get_normalized_hand_landmarks(rs_hand_result)
-        oak_hand_landmarks, oak_handedness = get_normalized_hand_landmarks(oak_hand_result)
+            rs_hand_result = rs_hand_detector.detect_for_video(mp_rs_image, timestamp)
+            oak_hand_result = oak_hand_detector.detect_for_video(mp_oak_image, timestamp)
+            rs_hand_landmarks, rs_handedness = get_normalized_hand_landmarks(rs_hand_result)
+            oak_hand_landmarks, oak_handedness = get_normalized_hand_landmarks(oak_hand_result)
 
         opposite_rgb = draw_arm_landmarks_on_image(opposite_rgb, rs_arm_landmarks)
         rightside_rgb = draw_arm_landmarks_on_image(rightside_rgb, oak_arm_landmarks)
@@ -279,7 +278,7 @@ if __name__ == "__main__":
                 frame_size, 
                 landmarks_id_want_to_get,
                 arm_visibility_threshold)  # shape: (N, 3)
-            
+                
             if (rs_arm_xyZ is not None and
                 oak_arm_xyZ is not None and
                 not np.isnan(rs_arm_xyZ).any() and
@@ -335,49 +334,20 @@ if __name__ == "__main__":
             arm_hand_fused_XYZ = np.concatenate([arm_fused_XYZ, hand_fused_XYZ], axis=0)
             arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
 
+            #for i in range(len(arm_hand_fused_names)):
+                #kalman_filter = kalman_filters[i]
+                #landmarks = arm_hand_XYZ_wrt_shoulder[i]
+                #kalman_filter.predict()
+                #kalman_filter.update(landmarks.flatten())
+                #smooth_landmark = kalman_filter.x
+                #arm_hand_XYZ_wrt_shoulder[i, :] = smooth_landmark.reshape(1, 3) 
+
             #angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, arm_hand_fused_names)
 
             if plot_3d:
                 arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))
                 if arm_points_vis_queue.qsize() > 1:
                     arm_points_vis_queue.get()
-                #hand_points_vis_queue.put(hand_XYZ_wrt_wrist)
-
-        #if (right_cam_arm_landmarks_XYZ is not None and
-            #not np.isnan(right_cam_arm_landmarks_XYZ).any() and
-            #right_cam_arm_landmarks_XYZ.shape[0] == len(landmarks_id_want_to_get)):
-
-            #arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(right_cam_arm_landmarks_XYZ, arm_hand_fused_names)  
-
-            #if plot_3d:
-                #arm_points_vis_queue.put((right_cam_arm_landmarks_XYZ, xyz_origin))
-                #if arm_points_vis_queue.qsize() > 1:
-                    #arm_points_vis_queue.get()
-
-            ##left_wrist_index = -1
-            ##if hand_to_fuse == "Left":
-                ##left_wrist_index = landmarks_name_want_to_get.index("left wrist")
-            ##assert left_wrist_index != -1
-
-            ### Translate all landmarks of left hand from hand_detection to left wrist from pose_detection 
-            ##right_cam_left_wrist_offset = right_cam_arm_landmarks_XYZ[left_wrist_index, :]
-            ##right_cam_hand_landmarks_XYZ = right_cam_hand_landmarks_XYZ + right_cam_left_wrist_offset 
-            ##arm_hand_XYZ = np.concatenate([right_cam_arm_landmarks_XYZ, right_cam_hand_landmarks_XYZ], axis=0)  # (M, 3), M = (9 for arm) + (21 for hand)
-            ##arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(arm_hand_XYZ, arm_hand_fused_names)  
-
-            ##for i in range(len(arm_hand_fused_names)):
-                ##kalman_filter = kalman_filters[i]
-                ##landmarks = arm_hand_XYZ_wrt_shoulder[i]
-                ##kalman_filter.predict()
-                ##kalman_filter.update(landmarks.flatten())
-                ##smooth_landmark = kalman_filter.x
-                ##arm_hand_XYZ_wrt_shoulder[i, :] = smooth_landmark.reshape(1, 3) 
-
-            ##if plot_3d:
-                ##arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))
-                ##if arm_points_vis_queue.qsize() > 1:
-                    ##arm_points_vis_queue.get()
-                ###hand_points_vis_queue.put(hand_XYZ_wrt_wrist)
 
         frame_count += 1
         elapsed_time = time.time() - start_time

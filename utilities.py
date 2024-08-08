@@ -184,8 +184,7 @@ def get_landmarks_name_based_on_arm(arm_to_get="left"):
 
 	assert arm_to_get in ["left", "right"]
 
-	landmarks_name = ["left shoulder", "left elbow", "left wrist",
-        "left pinky", "left index", "left thumb", "left hip"]
+	landmarks_name = ["left shoulder", "left elbow", "left hip"]
 	landmarks_to_visualize = ["right shoulder", "right hip"]
 
 	if arm_to_get == "right":
@@ -267,7 +266,7 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
             opposite_cam_intrinsic=opposite_cam_intrinsic,
             right_to_opposite_correctmat=right_to_opposite_correctmat)
         result = minimize(min_dis, 
-            tol=1e-3,
+            tol=1e-2,
             x0=[right_side_i_xyZ[-1], opposite_i_xyZ[-1]])
         right_side_i_new_Z, opposite_i_new_Z = result.x
         right_side_new_Z.append(right_side_i_new_Z)
