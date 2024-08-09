@@ -25,12 +25,12 @@ utilities:
 
 debugging_mode:
   draw_xyz: false
-  show_left_arm_angle_j1: true       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+  show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
   show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
-  show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
-  show_left_arm_angle_j4: true       # Plotting left arm joint 4 and its reference vector to debug (visualize)
+  show_left_arm_angle_j3: true       # Plotting left arm joint 3 and its reference vector to debug (visualize)
+  show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
   show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
-  show_left_arm_angle_j6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
+  show_left_arm_angle_j6: true       # Plotting left arm joint 6 and its reference vector to debug (visualize)
   ref_vector_color: 
     - 1
     - 0
