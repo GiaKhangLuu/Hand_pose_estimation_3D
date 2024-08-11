@@ -204,5 +204,5 @@ def get_angles_between_joints(XYZ_landmarks, landmark_dictionary, original_xyz):
     angle_j5 = calculate_angle_j5(wrist_coordinate_wrt_elbow_rot_mat, wrist_coordinate_wrt_elbow)
     angle_j6 = calculate_angle_j6(wrist_coordinate_wrt_elbow_rot_mat)
 
-    return [angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6]
+    return angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6
 
