@@ -1,23 +1,27 @@
 camera:
   left_camera:
     mxid: "18443010E13D641200"
-    left_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/camera_calibration/left_oak_calibration.npz
+    stereo: 
+      width: 1920
+      height: 1080
+    left_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/left_oak_calibration.npz
   right_camera:
     mxid: "18443010613E940F00"
-    right_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/camera_calibration/right_oak_calibration.npz
+    stereo: 
+      width: 1920
+      height: 1080
+    right_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/right_oak_calibration.npz
 
 process_frame:
   frame_color_format: bgr
   frame_size:  # the higher resolution is, the futher distance which can be processed by the system
-    width: 1920
-    height: 1080
+    width: 960
+    height: 540
 
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_angles: false
-  save_images: true
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
 
 debugging_mode:
   draw_xyz: false

@@ -1,7 +1,7 @@
 """
 Convention:
-    rs = opposite = REALSENSE camera
-    oak = rightside = OAK camera
+    rs = opposite = REALSENSE camera = left
+    oak = rightside = OAK camera = right
 """
 
 import sys
@@ -22,11 +22,13 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from mediapipe.framework.formats import landmark_pb2
 from filterpy.kalman import KalmanFilter
+from datetime import datetime
 
 from stream_3d import visualize_arm, visualize_hand
 from angle_calculation import get_angles_between_joints
 from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_on_image
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
+from csv_writer import create_csv, append_to_csv, fusion_csv_columns_names 
 from utilities import (detect_hand_landmarks,
     detect_arm_landmarks,
     get_normalized_and_world_pose_landmarks,
@@ -49,13 +51,9 @@ config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml")
 config = load_config(config_file_path)
 
 left_oak_mxid = config["camera"]["left_camera"]["mxid"]
-left_oak_stereo_size = (config["camera"]["left_camera"]["stereo"]["width"], 
-    config["camera"]["left_camera"]["stereo"]["height"]) 
 left_cam_calib_path = config["camera"]["left_camera"]["left_camera_calibration_path"]
 
 right_oak_mxid = config["camera"]["right_camera"]["mxid"]
-right_oak_stereo_size = (config["camera"]["right_camera"]["stereo"]["width"], 
-    config["camera"]["right_camera"]["stereo"]["height"]) 
 right_cam_calib_path = config["camera"]["right_camera"]["right_camera_calibration_path"]
 
 frame_size = (config["process_frame"]["frame_size"]["width"], 
@@ -65,6 +63,8 @@ frame_color_format = config["process_frame"]["frame_color_format"]
 plot_3d = config["utilities"]["plot_3d"]
 is_draw_landmarks = config["utilities"]["draw_landmarks"]
 save_landmarks = config["utilities"]["save_landmarks"]
+save_angles = config["utilities"]["save_angles"]
+save_images = config["utilities"]["save_images"]
 
 arm_detection_activation = config["arm_landmark_detection"]["is_enable"]
 arm_min_det_conf = config["arm_landmark_detection"]["min_detection_confidence"]
@@ -167,8 +167,24 @@ arm_hand_fused_names = landmarks_name_want_to_get.copy()
 arm_hand_fused_names.extend(hand_landmarks_name) 
 
 if __name__ == "__main__":
-    pipeline_left_oak = initialize_oak_cam(left_oak_stereo_size)
-    pipeline_right_oak = initialize_oak_cam(right_oak_stereo_size)
+
+    if (save_landmarks or
+        save_angles or
+        save_images):
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        DATA_DIR = os.path.join("data", current_time)
+        os.mkdir(DATA_DIR)
+        
+        if save_landmarks:
+            LANDMARK_CSV_PATH = os.path.join(DATA_DIR, "landmarks_{}".format(current_time))
+            create_csv(LANDMARK_CSV_PATH, fusion_csv_columns_names)
+
+        if save_images:
+            IMAGE_DIR = os.path.join(DATA_DIR, "image") 
+            os.mkdir(IMAGE_DIR)
+
+    pipeline_left_oak = initialize_oak_cam()
+    pipeline_right_oak = initialize_oak_cam()
 
     left_oak_thread = threading.Thread(target=stream_oak, args=(pipeline_left_oak,  
         opposite_frame_getter_queue, left_oak_mxid), daemon=True)
@@ -222,14 +238,21 @@ if __name__ == "__main__":
         oak_hand_landmarks, oak_handedness = None, None
         rs_arm_landmarks = None
         oak_arm_landmarks = None
-        arm_fused_XYZ, hand_fused_XYZ = None, None 
+        arm_fused_XYZ, hand_fused_XYZ = None, None
+        rs_arm_xyZ, oak_arm_xyZ = None, None 
+        rs_hand_xyZ, oak_hand_xyZ = None, None
 
         # 1. Get and preprocess rgb and its depth
-        opposite_rgb = opposite_frame_getter_queue.get()
-        rightside_rgb = rightside_frame_getter_queue.get()
+        opposite_rgb, opposite_depth = opposite_frame_getter_queue.get()
+        rightside_rgb, rightside_depth = rightside_frame_getter_queue.get()
 
         opposite_rgb = cv2.resize(opposite_rgb, frame_size)
         rightside_rgb = cv2.resize(rightside_rgb, frame_size)
+        opposite_depth = cv2.resize(opposite_depth, frame_size)
+        rightside_depth = cv2.resize(rightside_depth, frame_size)
+
+        left_image_to_save = np.copy(opposite_rgb)
+        right_image_to_save = np.copy(rightside_rgb)
 
         if arm_detection_activation:
             processed_rs_img = np.copy(opposite_rgb) 
@@ -273,25 +296,14 @@ if __name__ == "__main__":
             rs_arm_xyZ = get_xyZ(rs_arm_landmarks, 
                 frame_size, 
                 landmarks_id_want_to_get,
-                arm_visibility_threshold)  # shape: (N, 3)
+                arm_visibility_threshold,
+                depth_map=opposite_depth)  # shape: (N, 3)
             oak_arm_xyZ = get_xyZ(oak_arm_landmarks, 
                 frame_size, 
                 landmarks_id_want_to_get,
-                arm_visibility_threshold)  # shape: (N, 3)
+                arm_visibility_threshold,
+                depth_map=rightside_depth)  # shape: (N, 3)
                 
-            if (rs_arm_xyZ is not None and
-                oak_arm_xyZ is not None and
-                not np.isnan(rs_arm_xyZ).any() and
-                not np.isnan(oak_arm_xyZ).any() and
-                len(rs_arm_xyZ) == len(oak_arm_xyZ) and 
-                len(rs_arm_xyZ) > 0 and
-                len(oak_arm_xyZ) > 0):
-                arm_fused_XYZ = fuse_landmarks_from_two_cameras(rs_arm_xyZ,  # shape: (N, 3)
-                    oak_arm_xyZ,  
-                    right_oak_ins,
-                    left_oak_ins,
-                    right_2_left_mat_avg)
-
         if (rs_hand_landmarks and 
             rs_handedness and 
             oak_hand_landmarks and 
@@ -307,32 +319,78 @@ if __name__ == "__main__":
             rs_hand_xyZ = get_xyZ(rs_hand_landmarks,  # shape: (21, 3) for single hand
                 frame_size,
                 landmark_ids_to_get=None,
-                visibility_threshold=None)
+                visibility_threshold=None,
+                depth_map=opposite_depth)
             oak_hand_xyZ = get_xyZ(oak_hand_landmarks,  # shape: (21, 3) for single hand
                 frame_size,
                 landmark_ids_to_get=None,
-                visibility_threshold=None)
+                visibility_threshold=None,
+                depth_map=rightside_depth)
 
-            if (rs_hand_xyZ is not None and
-                oak_hand_xyZ is not None and 
-                not np.isnan(rs_hand_xyZ).any() and
-                not np.isnan(oak_hand_xyZ).any() and
-                len(rs_hand_xyZ) == len(oak_hand_xyZ) and
-                len(rs_hand_xyZ) > 0 and
-                len(oak_hand_xyZ) > 0):
-                hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_hand_xyZ,  # shape: (21, 3) for single hand
-                    oak_hand_xyZ,
-                    right_oak_ins,
-                    left_oak_ins,
-                    right_2_left_mat_avg)
+        if (rs_arm_xyZ is not None and
+            oak_arm_xyZ is not None and
+            not np.isnan(rs_arm_xyZ).any() and
+            not np.isnan(oak_arm_xyZ).any() and
+            len(rs_arm_xyZ) == len(oak_arm_xyZ) and 
+            len(rs_arm_xyZ) > 0 and
+            len(oak_arm_xyZ) > 0 and
+            rs_hand_xyZ is not None and
+            oak_hand_xyZ is not None and 
+            not np.isnan(rs_hand_xyZ).any() and
+            not np.isnan(oak_hand_xyZ).any() and
+            len(rs_hand_xyZ) == len(oak_hand_xyZ) and
+            len(rs_hand_xyZ) > 0 and
+            len(oak_hand_xyZ) > 0):
 
-        if (arm_fused_XYZ is not None and 
-            hand_fused_XYZ is not None):
-            """
-            Convert these all to shoulder coord. to plot
-            """
-            arm_hand_fused_XYZ = np.concatenate([arm_fused_XYZ, hand_fused_XYZ], axis=0)
+            rs_selected_xyZ = np.concatenate([rs_arm_xyZ, rs_hand_xyZ], axis=0)
+            oak_selected_xyZ = np.concatenate([oak_arm_xyZ, oak_hand_xyZ], axis=0)
+
+            arm_hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_selected_xyZ,
+                oak_selected_xyZ,
+                right_oak_ins,
+                left_oak_ins,
+                right_2_left_mat_avg)
+
             arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
+
+            if save_landmarks:
+                #left_cam_landmarks = np.zeros((48, 3))
+                #right_cam_landmarks = np.zeros((48, 3))
+                #output_landmarks = np.zeros((48, 3))
+
+                rs_selected_xyZ[:, 0] = rs_selected_xyZ[:, 0] / frame_size[0]
+                rs_selected_xyZ[:, 1] = rs_selected_xyZ[:, 1] / frame_size[1]
+
+                oak_selected_xyZ[:, 0] = oak_selected_xyZ[:, 0] / frame_size[0]
+                oak_selected_xyZ[:, 1] = oak_selected_xyZ[:, 1] / frame_size[1]
+
+                left_cam_landmarks = np.concatenate([rs_selected_xyZ, np.zeros((48 - rs_selected_xyZ.shape[0], 3))], axis=0)
+                right_cam_landmarks = np.concatenate([oak_selected_xyZ, np.zeros((48 - oak_selected_xyZ.shape[0], 3))], axis=0)
+                output_landmarks = np.concatenate([arm_hand_XYZ_wrt_shoulder, np.zeros((48 - arm_hand_XYZ_wrt_shoulder.shape[0], 3))])
+
+                #left_cam_landmarks += rs_selected_xyZ
+                #right_cam_landmarks += oak_selected_xyZ
+                #output_landmarks += arm_hand_XYZ_wrt_shoulder
+
+                left_cam_landmarks = left_cam_landmarks.T
+                right_cam_landmarks = right_cam_landmarks.T
+
+                input_row = np.concatenate([[timestamp],
+                    left_cam_landmarks.flatten(),
+                    left_oak_ins.flatten(),
+                    right_cam_landmarks.flatten(),
+                    right_oak_ins.flatten(),
+                    right_2_left_mat_avg.flatten(),
+                    output_landmarks.T.flatten(),
+                    xyz_origin.flatten()])
+
+                append_to_csv(LANDMARK_CSV_PATH, input_row)
+            
+            if save_images:
+                left_img_path = os.path.join(IMAGE_DIR, "left_{}.jpg".format(timestamp))
+                right_img_path = os.path.join(IMAGE_DIR, "right_{}.jpg".format(timestamp))
+                cv2.imwrite(left_img_path, left_image_to_save)
+                cv2.imwrite(right_img_path, right_image_to_save)
 
             #for i in range(len(arm_hand_fused_names)):
                 #kalman_filter = kalman_filters[i]
@@ -342,7 +400,7 @@ if __name__ == "__main__":
                 #smooth_landmark = kalman_filter.x
                 #arm_hand_XYZ_wrt_shoulder[i, :] = smooth_landmark.reshape(1, 3) 
 
-            #angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, arm_hand_fused_names)
+            angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, arm_hand_fused_names, xyz_origin)
 
             if plot_3d:
                 arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))

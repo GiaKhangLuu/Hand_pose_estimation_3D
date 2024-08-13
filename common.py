@@ -76,11 +76,13 @@ def get_depth(positions: NDArray, depth: NDArray, sliding_window_size) -> NDArra
         mask = z_values > 0
         z_values = z_values[mask]
         z_median = np.median(z_values)
+        if np.isnan(z_median) or np.isnan(z_median):
+            z_median = 0
         z_landmarks.append(z_median)
 
     return np.array(z_landmarks)
 
-def get_xyZ(landmarks, frame_size, landmark_ids_to_get=None, visibility_threshold=None):
+def get_xyZ(landmarks, frame_size, landmark_ids_to_get=None, visibility_threshold=None, depth_map=None):
     """
     Input:
         landmark_ids_to_get = None means get all landmarks
@@ -116,4 +118,10 @@ def get_xyZ(landmarks, frame_size, landmark_ids_to_get=None, visibility_threshol
 
     xyz = np.array(xyz)
     xyz_unnorm = unnormalize(xyz, frame_size)
+
+    if depth_map is not None:
+        xy_unnorm = xyz_unnorm[:, :-1]
+        Z = get_depth(xy_unnorm, depth_map, 9)
+        xyZ = np.concatenate([xy_unnorm, Z[:, None]], axis=-1)
+        return xyZ
     return xyz_unnorm
