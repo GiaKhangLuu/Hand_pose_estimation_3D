@@ -1,3 +1,5 @@
+use_dl_to_fuse: false
+
 camera:
   left_camera:
     mxid: "18443010E13D641200"

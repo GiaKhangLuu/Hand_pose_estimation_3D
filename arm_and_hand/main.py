@@ -17,6 +17,8 @@ import numpy as np
 import queue
 import threading
 import time
+import pandas as pd
+import torch
 from functools import partial
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -28,7 +30,7 @@ from stream_3d import visualize_arm, visualize_hand
 from angle_calculation import get_angles_between_joints
 from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_on_image
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
-from csv_writer import create_csv, append_to_csv, fusion_csv_columns_names 
+from csv_writer import create_csv, append_to_csv, fusion_csv_columns_names, split_train_test_val
 from utilities import (detect_hand_landmarks,
     detect_arm_landmarks,
     get_normalized_and_world_pose_landmarks,
@@ -45,6 +47,7 @@ from common import (load_data_from_npz_file,
     get_oak_2_rs_matrix,
     load_config,
     get_xyZ)
+from transformer_encoder import TransformerEncoder
 
 # ------------------- READ CONFIG ------------------- 
 config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml") 
@@ -97,6 +100,12 @@ debug_angle_j5 = config["debugging_mode"]["show_left_arm_angle_j5"]
 debug_angle_j6 = config["debugging_mode"]["show_left_arm_angle_j6"]
 ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
+
+use_fusing_network = config["use_dl_to_fuse"]
+
+if use_fusing_network:
+    save_landmarks = False
+    save_images = False
 
 # -------------------- GET TRANSFORMATION MATRIX -------------------- 
 right_cam_data = load_data_from_npz_file(right_cam_calib_path)
@@ -166,17 +175,33 @@ landmarks_id_want_to_get = [arm_pose_landmarks_name.index(name) for name in land
 arm_hand_fused_names = landmarks_name_want_to_get.copy()
 arm_hand_fused_names.extend(hand_landmarks_name) 
 
+sequence_length = 5  
+fusing_model = None
+if use_fusing_network:
+    input_dim = 322
+    output_dim = 153
+    num_heads = 7
+    num_encoder_layers = 6
+    dim_feedforward = 512
+    dropout = 0.1
+    model_path = "best_model.pth"  
+
+    fusing_model = TransformerEncoder(input_dim, output_dim, num_heads, num_encoder_layers, dim_feedforward, dropout)
+    fusing_model.load_state_dict(torch.load(model_path))
+    fusing_model.to("cuda")
+    fusing_model.eval()
+
 if __name__ == "__main__":
 
     if (save_landmarks or
         save_angles or
         save_images):
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+        current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
         DATA_DIR = os.path.join("data", current_time)
         os.mkdir(DATA_DIR)
         
         if save_landmarks:
-            LANDMARK_CSV_PATH = os.path.join(DATA_DIR, "landmarks_{}".format(current_time))
+            LANDMARK_CSV_PATH = os.path.join(DATA_DIR, "landmarks_all_{}.csv".format(current_time))
             create_csv(LANDMARK_CSV_PATH, fusion_csv_columns_names)
 
         if save_images:
@@ -233,6 +258,7 @@ if __name__ == "__main__":
         #f.Q = process_noise
         #kalman_filters.append(f)
 
+    input_frames = []
     while True:
         rs_hand_landmarks, rs_handedness = None, None
         oak_hand_landmarks, oak_handedness = None, None
@@ -241,6 +267,8 @@ if __name__ == "__main__":
         arm_fused_XYZ, hand_fused_XYZ = None, None
         rs_arm_xyZ, oak_arm_xyZ = None, None 
         rs_hand_xyZ, oak_hand_xyZ = None, None
+        arm_hand_XYZ_wrt_shoulder = None
+
 
         # 1. Get and preprocess rgb and its depth
         opposite_rgb, opposite_depth = opposite_frame_getter_queue.get()
@@ -345,13 +373,49 @@ if __name__ == "__main__":
             rs_selected_xyZ = np.concatenate([rs_arm_xyZ, rs_hand_xyZ], axis=0)
             oak_selected_xyZ = np.concatenate([oak_arm_xyZ, oak_hand_xyZ], axis=0)
 
-            arm_hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_selected_xyZ,
-                oak_selected_xyZ,
-                right_oak_ins,
-                left_oak_ins,
-                right_2_left_mat_avg)
+            if use_fusing_network:
+                rs_selected_xyZ[:, 0] = rs_selected_xyZ[:, 0] / frame_size[0]
+                rs_selected_xyZ[:, 1] = rs_selected_xyZ[:, 1] / frame_size[1]
 
-            arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
+                oak_selected_xyZ[:, 0] = oak_selected_xyZ[:, 0] / frame_size[0]
+                oak_selected_xyZ[:, 1] = oak_selected_xyZ[:, 1] / frame_size[1]
+
+                left_cam_landmarks = np.concatenate([rs_selected_xyZ, np.zeros((48 - rs_selected_xyZ.shape[0], 3))], axis=0)
+                right_cam_landmarks = np.concatenate([oak_selected_xyZ, np.zeros((48 - oak_selected_xyZ.shape[0], 3))], axis=0)
+
+                left_cam_landmarks = left_cam_landmarks.T
+                right_cam_landmarks = right_cam_landmarks.T
+
+                input_row = np.concatenate([left_cam_landmarks.flatten(),
+                    left_oak_ins.flatten(),
+                    right_cam_landmarks.flatten(),
+                    right_oak_ins.flatten(),
+                    right_2_left_mat_avg.flatten()])
+
+                input_frames.append(input_row)
+
+                if len(input_frames) == sequence_length:
+                    x = np.array(input_frames)
+                    x = x[:, None, :]
+                    x = torch.tensor(x, dtype=torch.float32)
+                    with torch.no_grad():
+                        x = x.to("cuda")
+                        y = fusing_model(x)
+                        y = y.detach().to("cpu").numpy()[0]
+                    input_frames = input_frames[1:]
+                    arm_hand_XYZ_wrt_shoulder = y[:144]
+                    xyz_origin = y[144:]
+                    arm_hand_XYZ_wrt_shoulder = arm_hand_XYZ_wrt_shoulder.reshape(3, 48)
+                    arm_hand_XYZ_wrt_shoulder = arm_hand_XYZ_wrt_shoulder.T
+                    xyz_origin = xyz_origin.reshape(3, 3)
+            else:
+                arm_hand_fused_XYZ = fuse_landmarks_from_two_cameras(rs_selected_xyZ,
+                    oak_selected_xyZ,
+                    right_oak_ins,
+                    left_oak_ins,
+                    right_2_left_mat_avg)
+
+                arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
 
             if save_landmarks:
                 #left_cam_landmarks = np.zeros((48, 3))
@@ -399,10 +463,10 @@ if __name__ == "__main__":
                 #kalman_filter.update(landmarks.flatten())
                 #smooth_landmark = kalman_filter.x
                 #arm_hand_XYZ_wrt_shoulder[i, :] = smooth_landmark.reshape(1, 3) 
+            if arm_hand_XYZ_wrt_shoulder is not None:
+                angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, arm_hand_fused_names, xyz_origin)
 
-            angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, arm_hand_fused_names, xyz_origin)
-
-            if plot_3d:
+            if plot_3d and arm_hand_XYZ_wrt_shoulder is not None:
                 arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))
                 if arm_points_vis_queue.qsize() > 1:
                     arm_points_vis_queue.get()
@@ -428,4 +492,8 @@ if __name__ == "__main__":
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             cv2.destroyAllWindows()
+
+            if save_landmarks:
+                split_train_test_val(LANDMARK_CSV_PATH)
+
             break

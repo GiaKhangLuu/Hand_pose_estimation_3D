@@ -1,4 +1,5 @@
 import csv
+import pandas as pd
 import os
 
 def create_csv(filename, headers):
@@ -12,7 +13,31 @@ def append_to_csv(filename, row):
         writer = csv.writer(file)
         writer.writerow(row)
 
-fusion_csv_columns_names = ["timestamp"
+def split_train_test_val(filename):
+    df = pd.read_csv(filename)
+    total_rows = len(df)
+    test_size = int(0.10 * total_rows)
+    val_size = int(0.20 * total_rows)
+
+    # Get indices for splitting
+    test_indices = range(total_rows - test_size, total_rows)
+    val_indices = range(total_rows - test_size - val_size, total_rows - test_size)
+
+    # Create DataFrames for each split
+    test_df = df.iloc[test_indices]
+    val_df = df.iloc[val_indices]
+    train_df = df.drop(test_indices).drop(val_indices)
+
+    # Save the split DataFrames to CSV files
+    train_path = filename.replace("all", "train")
+    val_path = filename.replace("all", "val")
+    test_path = filename.replace("all", "test")
+
+    train_df.to_csv(train_path, index=False)
+    val_df.to_csv(val_path, index=False)
+    test_df.to_csv(test_path, index=False)
+
+fusion_csv_columns_names = ["timestamp",
     "left_shoulder_cam_left_x",
     "left_elbow_cam_left_x",
     "left_hip_cam_left_x",
