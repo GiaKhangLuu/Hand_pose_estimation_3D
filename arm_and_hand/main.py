@@ -105,7 +105,6 @@ use_fusing_network = config["use_dl_to_fuse"]
 
 if use_fusing_network:
     save_landmarks = False
-    save_images = False
 
 # -------------------- GET TRANSFORMATION MATRIX -------------------- 
 right_cam_data = load_data_from_npz_file(right_cam_calib_path)
@@ -197,7 +196,11 @@ if __name__ == "__main__":
         save_angles or
         save_images):
         current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
-        DATA_DIR = os.path.join("data", current_time)
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        DATA_DIR = os.path.join("data", current_date)
+        if not os.path.exists(DATA_DIR):
+            os.mkdir(DATA_DIR)
+        DATA_DIR = os.path.join(DATA_DIR, current_time)
         os.mkdir(DATA_DIR)
         
         if save_landmarks:
