@@ -116,13 +116,34 @@ right_2_left_mat_avg = get_oak_2_rs_matrix(right_oak_r_raw, right_oak_t_raw,
     left_oak_r_raw, left_oak_t_raw)
 
 # -------------------- INIT DETECTION MODELS -------------------- 
-pose_config = os.path.join(MMPOSE_DIR, 
-    "projects/rtmpose/rtmpose/wholebody_2d_keypoint/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py")
-pose_ckpt = "/home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth"
+
+left_detector = init_detector(
+    os.path.join(MMPOSE_DIR, "projects/rtmpose/rtmdet/person/rtmdet_nano_320-8xb32_coco-person.py"), 
+    "https://download.openmmlab.com/mmpose/v1/projects/rtmpose/rtmdet_nano_8xb32-100e_coco-obj365-person-05d8511e.pth", 
+    device="cuda")
+left_detector.cfg = adapt_mmdet_pipeline(left_detector.cfg)
+
+right_detector = init_detector(
+    os.path.join(MMPOSE_DIR, "projects/rtmpose/rtmdet/person/rtmdet_nano_320-8xb32_coco-person.py"), 
+    "https://download.openmmlab.com/mmpose/v1/projects/rtmpose/rtmdet_nano_8xb32-100e_coco-obj365-person-05d8511e.pth", 
+    device="cuda")
+right_detector.cfg = adapt_mmdet_pipeline(right_detector.cfg)
+
+
+#pose_config = os.path.join(MMPOSE_DIR, 
+    #"configs/wholebody_2d_keypoint/rtmpose/coco-wholebody/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py")
+#pose_ckpt = "/home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth"
+#left_pose_config = "/home/giakhang/dev/pose_sandbox/rtmpose-m_4_left_cam.py"
+#right_pose_config = "/home/giakhang/dev/pose_sandbox/rtmpose-m_4_right_cam.py"
+#left_pose_ckpt = "/home/giakhang/dev/pose_sandbox/left_cam_rtmpose-m.pth"
+#right_pose_ckpt = "/home/giakhang/dev/pose_sandbox/right_cam_rtmpose-m.pth"
+left_pose_config = right_pose_config = os.path.join(MMPOSE_DIR,
+    "configs/wholebody_2d_keypoint/rtmpose/coco-wholebody/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py")
+left_pose_ckpt = right_pose_ckpt = "/home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth"
 device = 'cuda'
 
-left_cam_pose_estimator = init_pose_estimator(pose_config, pose_ckpt, device=device) # Each camera is responsible for one detector because the detector stores the pose in prev. frame
-right_cam_pose_estimator = init_pose_estimator(pose_config, pose_ckpt, device=device) # Each camera is responsible for one detector because the detector stores the pose in prev. frame
+left_cam_pose_estimator = init_pose_estimator(left_pose_config, left_pose_ckpt, device=device) # Each camera is responsible for one detector because the detector stores the pose in prev. frame
+right_cam_pose_estimator = init_pose_estimator(right_pose_config, right_pose_ckpt, device=device) # Each camera is responsible for one detector because the detector stores the pose in prev. frame
 left_cam_pose_estimator.cfg.visualizer.line_width = 2
 right_cam_pose_estimator.cfg.visualizer.line_width = 2
 
@@ -151,8 +172,8 @@ if __name__ == "__main__":
 
 
     landmark_dictionary = ["left shoulder", "left elbow", "left hip", "right shoulder", "right hip", 
-        "wrist", "thumb_cmc", "thumb_mcp", "thumb_ip", "thumb_tip", "index_finger_mcp", 
-        "index_finger_pip", "index_finger_dip", "index_finger_tip", "middle_finger_mcp", 
+        "WRIST", "thumb_cmc", "thumb_mcp", "thumb_ip", "thumb_tip", "INDEX_FINGER_MCP", 
+        "index_finger_pip", "index_finger_dip", "index_finger_tip", "MIDDLE_FINGER_MCP", 
         "middle_finger_pip", "middle_finger_dip", "middle_finger_tip", "ring_finger_mcp", 
         "ring_finger_pip", "ring_finger_dip", "ring_finger_tip", "pinky_mcp", "pinky_pip", 
         "pinky_dip", "pinky_tip"]
@@ -213,8 +234,25 @@ if __name__ == "__main__":
         left_depth = cv2.resize(left_depth, frame_size)
         right_depth = cv2.resize(right_depth, frame_size)
 
-        left_detection_result = inference_topdown(left_cam_pose_estimator, left_rgb)
-        right_detection_result = inference_topdown(right_cam_pose_estimator, right_rgb)
+        # predict bbox
+        left_det_result = inference_detector(left_detector, left_rgb)
+        left_pred_instance = left_det_result.pred_instances.cpu().numpy()
+        left_bboxes = np.concatenate(
+            (left_pred_instance.bboxes, left_pred_instance.scores[:, None]), axis=1)
+        left_bboxes = left_bboxes[np.logical_and(left_pred_instance.labels == 0,
+                                    left_pred_instance.scores > 0.8)]
+        left_bboxes = left_bboxes[nms(left_bboxes, 0.5), :4]
+
+        right_det_result = inference_detector(right_detector, right_rgb)
+        right_pred_instance = right_det_result.pred_instances.cpu().numpy()
+        right_bboxes = np.concatenate(
+            (right_pred_instance.bboxes, right_pred_instance.scores[:, None]), axis=1)
+        right_bboxes = right_bboxes[np.logical_and(right_pred_instance.labels == 0,
+                                    right_pred_instance.scores > 0.8)]
+        right_bboxes = right_bboxes[nms(right_bboxes, 0.5), :4]
+
+        left_detection_result = inference_topdown(left_cam_pose_estimator, left_rgb, left_bboxes)
+        right_detection_result = inference_topdown(right_cam_pose_estimator, right_rgb, right_bboxes)
 
         left_detection_result = merge_data_samples(left_detection_result)
         right_detection_result = merge_data_samples(right_detection_result)
@@ -225,7 +263,7 @@ if __name__ == "__main__":
             data_sample=left_detection_result,
             draw_gt=False,
             draw_heatmap=False,
-            draw_bbox=False,
+            draw_bbox=True,
             show_kpt_idx=False,
             skeleton_style="mmpose",
             show=False,
@@ -239,7 +277,7 @@ if __name__ == "__main__":
             data_sample=right_detection_result,
             draw_gt=False,
             draw_heatmap=False,
-            draw_bbox=False,
+            draw_bbox=True,
             show_kpt_idx=False,
             skeleton_style="mmpose",
             show=False,

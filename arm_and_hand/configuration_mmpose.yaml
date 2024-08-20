@@ -15,8 +15,8 @@ camera:
 process_frame:
   frame_color_format: bgr
   frame_size:  # the higher resolution is, the futher distance which can be processed by the system
-    width: 960
-    height: 540
+    width: 1920
+    height: 1080
 
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image

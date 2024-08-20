@@ -48,6 +48,7 @@ from common import (load_data_from_npz_file,
     load_config,
     get_xyZ)
 from transformer_encoder import TransformerEncoder
+from landmarks_detectors import LandmarksDetectors
 
 # ------------------- READ CONFIG ------------------- 
 config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml") 
@@ -55,19 +56,27 @@ config = load_config(config_file_path)
 
 left_oak_mxid = config["camera"]["left_camera"]["mxid"]
 left_cam_calib_path = config["camera"]["left_camera"]["left_camera_calibration_path"]
-
 right_oak_mxid = config["camera"]["right_camera"]["mxid"]
 right_cam_calib_path = config["camera"]["right_camera"]["right_camera_calibration_path"]
 
 frame_size = (config["process_frame"]["frame_size"]["width"], 
     config["process_frame"]["frame_size"]["height"])
-frame_color_format = config["process_frame"]["frame_color_format"]
+frame_calibrated_size = (config["camera"]["frame_calibrated_size"]["height"],
+    config["camera"]["frame_calibrated_size"]["width"])
 
 plot_3d = config["utilities"]["plot_3d"]
 is_draw_landmarks = config["utilities"]["draw_landmarks"]
 save_landmarks = config["utilities"]["save_landmarks"]
 save_angles = config["utilities"]["save_angles"]
 save_images = config["utilities"]["save_images"]
+
+detection_model_selection_id = config["detection_phase"]["model_selection_id"]
+detection_model_list = tuple(config["detection_phase"]["model_list"])
+landmarks_detectors = LandmarksDetectors(detection_model_selection_id, 
+    detection_model_list, config["detection_phase"])
+
+fusing_method_list = tuple(config["fusing_phase"]["fusing_methods"])
+fusing_method_selection = config["fusing_phase"]["fusing_selection_id"]
 
 arm_detection_activation = config["arm_landmark_detection"]["is_enable"]
 arm_min_det_conf = config["arm_landmark_detection"]["min_detection_confidence"]
@@ -127,9 +136,8 @@ def _scale_intrinsic_by_res(intrinsic, original_size, processed_size):
 
     return intrinsic
 
-original_size = (720, 1280)
-right_oak_ins = _scale_intrinsic_by_res(right_oak_ins, original_size, frame_size[::-1])
-left_oak_ins = _scale_intrinsic_by_res(left_oak_ins, original_size, frame_size[::-1])
+right_oak_ins = _scale_intrinsic_by_res(right_oak_ins, frame_calibrated_size, frame_size[::-1])
+left_oak_ins = _scale_intrinsic_by_res(left_oak_ins, frame_calibrated_size, frame_size[::-1])
 
 right_2_left_mat_avg = get_oak_2_rs_matrix(right_oak_r_raw, right_oak_t_raw, 
     left_oak_r_raw, left_oak_t_raw)
@@ -160,8 +168,8 @@ rs_arm_detector = vision.PoseLandmarker.create_from_options(arm_options)  # Each
 oak_arm_detector = vision.PoseLandmarker.create_from_options(arm_options)  # Each camera is responsible for one detector because the detector stores the pose in prev. frame
 
 # -------------------- CREATE QUEUE TO INTERACT WITH THREADS -------------------- 
-opposite_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (rgb, depth) from REALSENSE camera
-rightside_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (rgb, depth) from OAK camera
+left_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (rgb, depth) from REALSENSE camera
+right_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (rgb, depth) from OAK camera
 
 arm_points_vis_queue = queue.Queue()  # This queue stores fused arm landmarks to visualize by open3d
 hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks to visualize by open3d 
@@ -215,9 +223,9 @@ if __name__ == "__main__":
     pipeline_right_oak = initialize_oak_cam()
 
     left_oak_thread = threading.Thread(target=stream_oak, args=(pipeline_left_oak,  
-        opposite_frame_getter_queue, left_oak_mxid), daemon=True)
+        left_frame_getter_queue, left_oak_mxid), daemon=True)
     right_oak_thread = threading.Thread(target=stream_oak, args=(pipeline_right_oak,  
-        rightside_frame_getter_queue, right_oak_mxid), daemon=True)
+        right_frame_getter_queue, right_oak_mxid), daemon=True)
 
     vis_arm_thread = threading.Thread(target=visualize_arm,
         args=(arm_points_vis_queue, 
@@ -272,18 +280,27 @@ if __name__ == "__main__":
         rs_hand_xyZ, oak_hand_xyZ = None, None
         arm_hand_XYZ_wrt_shoulder = None
 
+        # Get and preprocess rgb and its depth
+        left_rgb, left_depth = left_frame_getter_queue.get()
+        right_rgb, right_depth = right_frame_getter_queue.get()
 
-        # 1. Get and preprocess rgb and its depth
-        opposite_rgb, opposite_depth = opposite_frame_getter_queue.get()
-        rightside_rgb, rightside_depth = rightside_frame_getter_queue.get()
+        left_rgb = cv2.resize(left_rgb, frame_size)
+        right_rgb = cv2.resize(right_rgb, frame_size)
+        left_depth = cv2.resize(left_depth, frame_size)
+        right_depth = cv2.resize(right_depth, frame_size)
 
-        opposite_rgb = cv2.resize(opposite_rgb, frame_size)
-        rightside_rgb = cv2.resize(rightside_rgb, frame_size)
-        opposite_depth = cv2.resize(opposite_depth, frame_size)
-        rightside_depth = cv2.resize(rightside_depth, frame_size)
+        left_image_to_save = np.copy(left_rgb)
+        right_image_to_save = np.copy(right_rgb)
 
-        left_image_to_save = np.copy(opposite_rgb)
-        right_image_to_save = np.copy(rightside_rgb)
+        # Detection phase
+        left_camera_body_landmarks_xyZ = landmarks_detectors.detect(left_rgb, left_depth, side="left")
+        right_camera_body_landmarks_xyZ = landmarks_detectors.detect(right_rgb, right_depth, side="right")
+
+        # Fusing phase
+        arm_hand_XYZ_wrt_shoulder, xyz_origin = ...
+
+
+        ----------------------
 
         if arm_detection_activation:
             processed_rs_img = np.copy(opposite_rgb) 
@@ -421,10 +438,6 @@ if __name__ == "__main__":
                 arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(arm_hand_fused_XYZ, arm_hand_fused_names)
 
             if save_landmarks:
-                #left_cam_landmarks = np.zeros((48, 3))
-                #right_cam_landmarks = np.zeros((48, 3))
-                #output_landmarks = np.zeros((48, 3))
-
                 rs_selected_xyZ[:, 0] = rs_selected_xyZ[:, 0] / frame_size[0]
                 rs_selected_xyZ[:, 1] = rs_selected_xyZ[:, 1] / frame_size[1]
 
@@ -434,10 +447,6 @@ if __name__ == "__main__":
                 left_cam_landmarks = np.concatenate([rs_selected_xyZ, np.zeros((48 - rs_selected_xyZ.shape[0], 3))], axis=0)
                 right_cam_landmarks = np.concatenate([oak_selected_xyZ, np.zeros((48 - oak_selected_xyZ.shape[0], 3))], axis=0)
                 output_landmarks = np.concatenate([arm_hand_XYZ_wrt_shoulder, np.zeros((48 - arm_hand_XYZ_wrt_shoulder.shape[0], 3))])
-
-                #left_cam_landmarks += rs_selected_xyZ
-                #right_cam_landmarks += oak_selected_xyZ
-                #output_landmarks += arm_hand_XYZ_wrt_shoulder
 
                 left_cam_landmarks = left_cam_landmarks.T
                 right_cam_landmarks = right_cam_landmarks.T

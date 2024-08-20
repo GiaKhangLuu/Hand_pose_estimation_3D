@@ -1,6 +1,136 @@
-use_dl_to_fuse: false
+detection_phase:
+  frame_color_format: bgr
+  hand_to_fuse: left
+  arm_to_fuse: left
+  num_person_to_detect: 1
+  model_list:
+    - mediapipe
+    - mmpose
+  model_selection_id: 0
+  mediapipe:
+    hand_detection:
+      is_enable: true
+      min_detection_confidence: 0.3
+      min_presence_confidence: 0.3
+      min_tracking_confidence: 0.3
+      num_hand: 2
+      model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/hand_landmarker.task
+      hand_landmarks:
+        - WRIST
+        - THUMB_CMC
+        - THUMB_MCP
+        - THUMB_IP
+        - THUMB_TIP
+        - INDEX_FINGER_MCP
+        - INDEX_FINGER_PIP
+        - INDEX_FINGER_DIP
+        - INDEX_FINGER_TIP
+        - MIDDLE_FINGER_MCP
+        - MIDDLE_FINGER_PIP
+        - MIDDLE_FINGER_DIP
+        - MIDDLE_FINGER_TIP
+        - RING_FINGER_MCP
+        - RING_FINGER_PIP
+        - RING_FINGER_DIP
+        - RING_FINGER_TIP
+        - PINKY_MCP
+        - PINKY_PIP
+        - PINKY_DIP
+        - PINKY_TIP
+    body_detection:
+      is_enable: true
+      min_detection_confidence: 0.5
+      min_tracking_confidence: 0.5
+      visibility_threshold: 0.2
+      model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/pose_landmarker_lite.task
+      body_landmarks:
+        - nose
+        - left eye (inner)
+        - left eye
+        - left eye (outer)
+        - right eye (inner)
+        - right eye
+        - right eye (outer)
+        - left ear
+        - right ear
+        - mouth (left)
+        - mouth (right)
+        - left shoulder
+        - right shoulder
+        - left elbow
+        - right elbow
+        - left wrist
+        - right wrist
+        - left pinky
+        - right pinky
+        - left index
+        - right index
+        - left thumb
+        - right thumb
+        - left hip
+        - right hip
+        - left knee
+        - right knee
+        - left ankle
+        - right ankle
+        - left heel
+        - right heel
+        - left foot index
+        - right foot index
+  mmpose:
+    person_detection:
+      is_enable: true
+      person_detector_config: /home/giakhang/dev/pose_sandbox/mmpose/projects/rtmpose/rtmdet/person/rtmdet_nano_320-8xb32_coco-person.py
+      person_detector_weight: https://download.openmmlab.com/mmpose/v1/projects/rtmpose/rtmdet_nano_8xb32-100e_coco-obj365-person-05d8511e.pth
+    pose_estimation:
+      is_enable: true
+      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/mmpose/configs/wholebody_2d_keypoint/rtmpose/coco-wholebody/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py
+      left_camera_pose_estimator_weight: /home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth
+      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/mmpose/configs/wholebody_2d_keypoint/rtmpose/coco-wholebody/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py
+      right_camera_pose_estimator_weight: /home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth
+  fusing_landmark_dictionary:
+    - left shoulder
+    - left elbow
+    - left hip
+    - right shoulder
+    - right hip
+    - WRIST
+    - THUMB_CMC
+    - THUMB_MCP
+    - THUMB_IP
+    - THUMB_TIP
+    - INDEX_FINGER_MCP
+    - INDEX_FINGER_PIP
+    - INDEX_FINGER_DIP
+    - INDEX_FINGER_TIP
+    - MIDDLE_FINGER_MCP
+    - MIDDLE_FINGER_PIP
+    - MIDDLE_FINGER_DIP
+    - MIDDLE_FINGER_TIP
+    - RING_FINGER_MCP
+    - RING_FINGER_PIP
+    - RING_FINGER_DIP
+    - RING_FINGER_TIP
+    - PINKY_MCP
+    - PINKY_PIP
+    - PINKY_DIP
+    - PINKY_TIP
+
+fusing_phase:
+  fusing_methods:
+    - deep_learning
+    - optimization
+  fusing_selection_id: 0
+  deep_learning: 
+    model_weight: None
+  optimization:
+    algo_name: L-BFGS-B
+    tolerance: 1e-10
 
 camera:
+  frame_calibrated_size:
+    width: 1280
+    height: 720
   left_camera:
     mxid: "18443010E13D641200"
     left_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/camera_calibration/left_oak_calibration.npz
@@ -9,7 +139,6 @@ camera:
     right_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/camera_calibration/right_oak_calibration.npz
 
 process_frame:
-  frame_color_format: bgr
   frame_size:  # the higher resolution is, the futher distance which can be processed by the system
     width: 1920
     height: 1080
@@ -38,82 +167,3 @@ debugging_mode:
     - 0
     - 1
 
-hand_landmark_detection:
-  is_enable: true
-  hand_to_fuse:
-    left: true
-    right: false
-    both: false
-  min_detection_confidence: 0.3
-  min_presence_confidence: 0.3
-  min_tracking_confidence: 0.3
-  num_hand: 2
-  model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/hand_landmarker.task
-  hand_landmarks:
-    - WRIST
-    - THUMB_CMC
-    - THUMB_MCP
-    - THUMB_IP
-    - THUMB_TIP
-    - INDEX_FINGER_MCP
-    - INDEX_FINGER_PIP
-    - INDEX_FINGER_DIP
-    - INDEX_FINGER_TIP
-    - MIDDLE_FINGER_MCP
-    - MIDDLE_FINGER_PIP
-    - MIDDLE_FINGER_DIP
-    - MIDDLE_FINGER_TIP
-    - RING_FINGER_MCP
-    - RING_FINGER_PIP
-    - RING_FINGER_DIP
-    - RING_FINGER_TIP
-    - PINKY_MCP
-    - PINKY_PIP
-    - PINKY_DIP
-    - PINKY_TIP
-
-arm_landmark_detection:
-  is_enable: true
-  arm_to_fuse:
-    left: true
-    right: false
-    both: false
-  min_detection_confidence: 0.5
-  min_tracking_confidence: 0.5
-  visibility_threshold: 0.2
-  num_pose: 1
-  model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/pose_landmarker_lite.task
-  pose_landmarks:
-    - nose
-    - left eye (inner)
-    - left eye
-    - left eye (outer)
-    - right eye (inner)
-    - right eye
-    - right eye (outer)
-    - left ear
-    - right ear
-    - mouth (left)
-    - mouth (right)
-    - left shoulder
-    - right shoulder
-    - left elbow
-    - right elbow
-    - left wrist
-    - right wrist
-    - left pinky
-    - right pinky
-    - left index
-    - right index
-    - left thumb
-    - right thumb
-    - left hip
-    - right hip
-    - left knee
-    - right knee
-    - left ankle
-    - right ankle
-    - left heel
-    - right heel
-    - left foot index
-    - right foot index
