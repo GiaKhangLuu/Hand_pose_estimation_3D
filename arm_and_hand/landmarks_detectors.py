@@ -11,6 +11,7 @@ from mmpose.structures import merge_data_samples
 from mmpose.evaluation.functional import nms
 from mmpose.utils import adapt_mmdet_pipeline
 
+import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from mediapipe.framework.formats import landmark_pb2
@@ -20,10 +21,12 @@ from utilities import (get_normalized_hand_landmarks,
     get_landmarks_name_based_on_arm,
     get_mediapipe_world_landmarks,
     xyZ_to_XYZ)
-from common import get_xyZ
+from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_on_image
+from common import (get_xyZ,
+    get_depth)
 
 class LandmarksDetectors:
-    def __init__(self, model_selected_id, model_list, model_config):
+    def __init__(self, model_selected_id, model_list, model_config, draw_landmarks):
         """
         Desc.
         Parameters:
@@ -33,16 +36,18 @@ class LandmarksDetectors:
 
         self._model_name = model_list[model_selected_id]
         config_by_model = model_config[self._model_name]
-        self._frame_color_format = model_config["frame_color_format"]
         hand_to_fuse = model_config["hand_to_fuse"]
         arm_to_fuse = model_config["arm_to_fuse"]
         self._fusing_landmark_names = model_config["fusing_landmark_dictionary"]
         self._num_person_to_detect = model_config["num_person_to_detect"]
+        self._draw_landmarks = draw_landmarks
 
         assert hand_to_fuse in ["left", "right", "both"]
         assert arm_to_fuse == hand_to_fuse
 
         if self._model_name == "mediapipe":
+            # -------------- INIT MEDIAPIPE MODELS -------------- 
+            self._mediapipe_cvt_color = config_by_model["convert_color_channel"]
             self._hand_detection_activation = config_by_model["hand_detection"]["is_enable"]
             hand_min_det_conf = config_by_model["hand_detection"]["min_detection_confidence"]
             hand_min_tracking_conf = config_by_model["hand_detection"]["min_tracking_confidence"]
@@ -56,7 +61,7 @@ class LandmarksDetectors:
             body_min_tracking_conf = config_by_model["body_detection"]["min_tracking_confidence"]
             self._body_visibility_threshold = config_by_model["body_detection"]["visibility_threshold"]
             body_model_path = config_by_model["body_detection"]["model_asset_path"]
-            body_landmarks_name = tuple(config_by_model["body_detection"]["pose_landmarks"])
+            body_landmarks_name = tuple(config_by_model["body_detection"]["body_landmarks"])
 
             self._hand_to_fuse = "Left" if hand_to_fuse else "Right"  # Currently select left or right (fix this if get both left and right)
             body_landmarks_names_want_to_get = get_landmarks_name_based_on_arm(arm_to_fuse)
@@ -98,6 +103,11 @@ class LandmarksDetectors:
                 self._left_camera_body_detector = None
                 self._right_camera_body_detector = None
         else:
+            # -------------- INIT MMPOSE MODELS -------------- 
+            self._mmpose_selected_landmarks_id = [5, 7, 11, 6, 12, 91, 92, 93, 94, 95, 
+                96, 97, 98, 99, 100, 101, 102, 103, 104, 
+                105, 106, 107, 108, 109, 110, 111]
+            self._mmpose_cvt_color = config_by_model["convert_color_channel"]
             self._person_detection_activation = config_by_model["person_detection"]["is_enable"]
             person_detector_config = config_by_model["person_detection"]["person_detector_config"]
             person_detector_weight = config_by_model["person_detection"]["person_detector_weight"]
@@ -123,52 +133,82 @@ class LandmarksDetectors:
                 self._right_camera_pose_estimator = init_pose_estimator(right_camera_pose_estimator_config, 
                     right_camera_pose_estimator_weight, device="cuda") 
 
-    def detect(self, img, depth_map, side, timestamp):
+            if (self._draw_landmarks and 
+                self._left_camera_pose_estimator is not None and
+                self._right_camera_pose_estimator is not None):
+                self._left_camera_pose_estimator.cfg.visualizer.line_width = 2
+                self._right_camera_pose_estimator.cfg.visualizer.line_width = 2
+                self._landmarks_threshold_to_draw = config_by_model["landmark_threshold_to_draw"]
+
+                # build the visualizer
+                self._left_camera_mmpose_visualizer = VISUALIZERS.build(
+                    self._left_camera_pose_estimator.cfg.visualizer)
+                self._right_camera_mmpose_visualizer = VISUALIZERS.build(
+                    self._right_camera_pose_estimator.cfg.visualizer)
+
+                # set skeleton, colormap and joint connection rule
+                self._left_camera_mmpose_visualizer.set_dataset_meta(
+                    self._left_camera_pose_estimator.dataset_meta)
+                self._right_camera_mmpose_visualizer.set_dataset_meta(
+                    self._right_camera_pose_estimator.dataset_meta)
+
+    def detect(self, img, depth_map, timestamp, side):
         assert side in ["left", "right"]
         img_size = img.shape[:-1]
         body_hand_selected_xyZ = None
+        drawed_img = np.copy(img)
+
         if self._model_name == "mediapipe":
+            # --------------  MEDIAPIPE DETECTION --------------  
             hand_detector, body_detector = None, None
+            hand_landmarks, handedness = None, None
+            body_landmarks = None
+            body_landmarks_xyZ, hand_landmarks_xyZ = None, None
+
             if self._hand_detection_activation:
+                hand_detector = self._left_camera_hand_detector if side == "left" else self._right_camera_hand_detector
                 processed_img = np.copy(img)
-                if frame_color_format == "bgr":
+                if self._mediapipe_cvt_color:
                     processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
                 mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_img)
 
                 hand_result = hand_detector.detect_for_video(mp_img, timestamp)
                 hand_landmarks, handedness = get_normalized_hand_landmarks(hand_result)
 
-                if (hand_landmarks and 
-                    handedness and 
-                    self._hand_to_fuse in handedness):
-                    hand_id = handedness.index(self._hand_to_fuse)
-                    hand_landmarks = hand_landmarks[hand_id]
-
-                    hand_landmarks_xyZ = get_xyZ(hand_landmarks,  # shape: (21, 3) for single hand
-                        img_size,
-                        landmark_ids_to_get=None,
-                        visibility_threshold=None,
-                        depth_map=depth_map)
-
             if self._body_detection_activation:
                 body_detector = self._left_camera_body_detector if side == "left" else self._right_camera_body_detector 
                 processed_img = np.copy(img)
-                if self._frame_color_format == "bgr":
+                if self._mediapipe_cvt_color:
                     processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
                 mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_img)
 
                 body_detection_result = body_detector.detect_for_video(mp_img, timestamp)
                 body_landmarks = get_normalized_pose_landmarks(body_detection_result)
 
-                if body_landmarks:
-                    if self._num_person_to_detect == 1:
-                        body_landmarks = body_landmarks[0]
+            drawed_img = draw_arm_landmarks_on_image(drawed_img, body_landmarks)
+            drawed_img = draw_hand_landmarks_on_image(drawed_img, hand_landmarks, handedness)
 
-                    body_landmarks_xyZ = get_xyZ(body_landmarks, 
-                        img_size, 
-                        self._body_landmarks_id_want_to_get,
-                        self._body_visibility_threshold,
-                        depth_map=depth_map)  # shape: (N, 3)
+            if (hand_landmarks and 
+                handedness and 
+                self._hand_to_fuse in handedness):
+                hand_id = handedness.index(self._hand_to_fuse)
+                hand_landmarks = hand_landmarks[hand_id]
+
+                hand_landmarks_xyZ = get_xyZ(hand_landmarks,  # shape: (21, 3) for single hand
+                    img_size,
+                    landmark_ids_to_get=None,
+                    visibility_threshold=None,
+                    depth_map=depth_map)
+
+            if body_landmarks:
+                if self._num_person_to_detect == 1:
+                    body_landmarks = body_landmarks[0]
+
+                body_landmarks_xyZ = get_xyZ(body_landmarks, 
+                    img_size, 
+                    self._body_landmarks_id_want_to_get,
+                    self._body_visibility_threshold,
+                    depth_map=depth_map)  # shape: (N, 3)
 
             if (body_landmarks_xyZ is not None and
                 not np.isnan(body_landmarks_xyZ).any() and
@@ -178,88 +218,60 @@ class LandmarksDetectors:
                 len(hand_landmarks_xyZ) > 0):
                 body_hand_selected_xyZ = np.concatenate([body_landmarks_xyZ, hand_landmarks_xyZ], axis=0)
         else:
+            # -------------- MMPOSE DETECTION -------------- 
+            person_detector, wholebody_detector = None, None
+            bboxes = None
             if self._person_detection_activation:  
-                det_result = inference_detector(left_detector, left_rgb)
-                left_pred_instance = left_det_result.pred_instances.cpu().numpy()
-                left_bboxes = np.concatenate(
-                    (left_pred_instance.bboxes, left_pred_instance.scores[:, None]), axis=1)
-                left_bboxes = left_bboxes[np.logical_and(left_pred_instance.labels == 0,
-                                            left_pred_instance.scores > 0.8)]
-                left_bboxes = left_bboxes[nms(left_bboxes, 0.5), :4]
-            
-            
-        return body_hand_selected_xyZ
+                person_detector = self._left_camera_person_detector if side == "left" else self._right_camera_person_detector
+                processed_img = np.copy(img)
+                if  self._mmpose_cvt_color:
+                    processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
+                det_result = inference_detector(person_detector, processed_img)
+                pred_instance = det_result.pred_instances.cpu().numpy()
+                bboxes = np.concatenate(
+                    (pred_instance.bboxes, pred_instance.scores[:, None]), axis=1)
+                bboxes = bboxes[np.logical_and(pred_instance.labels == 0,
+                    pred_instance.scores > 0.6)]
+                bboxes = bboxes[nms(bboxes, 0.3), :]
+                if bboxes.size > 0 and self._num_person_to_detect == 1:
+                    bboxes = bboxes[np.argmax(bboxes[:, -1])]
+                    bboxes = bboxes[None, :-1]
+            if self._pose_estimation_activation:
+                wholebody_detector = self._left_camera_pose_estimator if side == "left" else self._right_camera_pose_estimator
+                if self._draw_landmarks:
+                    visualizer = self._left_camera_mmpose_visualizer if side == "left" else self._right_camera_mmpose_visualizer
+                processed_img = np.copy(img)
+                if  self._mmpose_cvt_color:
+                    processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
+                if bboxes is not None and bboxes.size > 0: 
+                    wholebody_det_rs = inference_topdown(wholebody_detector, processed_img, bboxes)
+                else:
+                    wholebody_det_rs = inference_topdown(wholebody_detector, processed_img)
+                wholebody_det_rs = merge_data_samples(wholebody_det_rs)
+                wholebody_preds = wholebody_det_rs.get("pred_instances", None)
+                if wholebody_preds is not None:
+                    wholebody_landmarks = wholebody_preds.keypoints[0]
+                    body_hand_selected_xyZ = wholebody_landmarks[self._mmpose_selected_landmarks_id]
 
+                landmarks_depth = get_depth(body_hand_selected_xyZ, depth_map, 9)
+                body_hand_selected_xyZ = np.concatenate([body_hand_selected_xyZ, landmarks_depth[:, None]], axis=-1)
 
-        left_det_result = inference_detector(left_detector, left_rgb)
-        left_pred_instance = left_det_result.pred_instances.cpu().numpy()
-        left_bboxes = np.concatenate(
-            (left_pred_instance.bboxes, left_pred_instance.scores[:, None]), axis=1)
-        left_bboxes = left_bboxes[np.logical_and(left_pred_instance.labels == 0,
-                                    left_pred_instance.scores > 0.8)]
-        left_bboxes = left_bboxes[nms(left_bboxes, 0.5), :4]
+                if self._draw_landmarks:
+                    drawed_img = visualizer.add_datasample(
+                        'result',
+                        drawed_img,
+                        data_sample=wholebody_det_rs,
+                        draw_gt=False,
+                        draw_heatmap=False,
+                        draw_bbox=True,
+                        show_kpt_idx=False,
+                        skeleton_style="mmpose",
+                        show=False,
+                        wait_time=0,
+                        kpt_thr=self._landmarks_threshold_to_draw
+                    )
 
-        right_det_result = inference_detector(right_detector, right_rgb)
-        right_pred_instance = right_det_result.pred_instances.cpu().numpy()
-        right_bboxes = np.concatenate(
-            (right_pred_instance.bboxes, right_pred_instance.scores[:, None]), axis=1)
-        right_bboxes = right_bboxes[np.logical_and(right_pred_instance.labels == 0,
-                                    right_pred_instance.scores > 0.8)]
-        right_bboxes = right_bboxes[nms(right_bboxes, 0.5), :4]
+        detection_result = {"detection_result": body_hand_selected_xyZ,
+            "drawed_img": drawed_img}
 
-        left_detection_result = inference_topdown(left_cam_pose_estimator, left_rgb, left_bboxes)
-        right_detection_result = inference_topdown(right_cam_pose_estimator, right_rgb, right_bboxes)
-
-        left_detection_result = merge_data_samples(left_detection_result)
-        right_detection_result = merge_data_samples(right_detection_result)
-
-        left_rgb = left_cam_visualizer.add_datasample(
-            'opposite_result',
-            left_rgb,
-            data_sample=left_detection_result,
-            draw_gt=False,
-            draw_heatmap=False,
-            draw_bbox=True,
-            show_kpt_idx=False,
-            skeleton_style="mmpose",
-            show=False,
-            wait_time=0,
-            kpt_thr=0.3
-        )
-
-        right_rgb = right_cam_visualizer.add_datasample(
-            'rightside_result',
-            right_rgb,
-            data_sample=right_detection_result,
-            draw_gt=False,
-            draw_heatmap=False,
-            draw_bbox=True,
-            show_kpt_idx=False,
-            skeleton_style="mmpose",
-            show=False,
-            wait_time=0,
-            kpt_thr=0.3
-        )
-
-        left_predictions = left_detection_result.get("pred_instances", None)
-        right_predictions = right_detection_result.get("pred_instances", None)
-
-        if left_predictions is not None and right_predictions is not None:
-            left_body_landmarks = left_predictions.keypoints[0]
-            right_body_landmarks = right_predictions.keypoints[0]
-
-            landmarks_id_want_to_get = [5, 7, 11, 6, 12, 91, 92, 93, 94, 95, 
-                96, 97, 98, 99, 100, 101, 102, 103, 104, 
-                105, 106, 107, 108, 109, 110, 111]
-
-            left_selected_landmarks = left_body_landmarks[landmarks_id_want_to_get]
-            right_selected_landmarks = right_body_landmarks[landmarks_id_want_to_get]
-
-            left_Z = get_depth(left_selected_landmarks, left_depth, 9)
-            left_selected_landmarks_xyZ = np.concatenate([left_selected_landmarks, left_Z[:, None]], axis=-1)
-            right_Z = get_depth(right_selected_landmarks, right_depth, 9)
-            right_selected_landmarks_xyZ = np.concatenate([right_selected_landmarks, right_Z[:, None]], axis=-1)
-
-
-
-
+        return detection_result

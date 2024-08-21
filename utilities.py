@@ -14,56 +14,6 @@ from typing import Tuple, List
 from mediapipe.framework.formats import landmark_pb2
 import numpy as np
 
-def detect_arm_landmarks(rs_detector, oak_detector, input_queue, result_queue, image_format="bgr"):
-    while True:
-        if not input_queue.empty():
-            rs_color_img, oak_color_img, timestamp = input_queue.get()
-
-            processed_rs_img = np.copy(rs_color_img) 
-            processed_oak_img = np.copy(oak_color_img)
-            if image_format == "bgr":
-                processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
-                processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
-
-            mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
-            mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
-
-            rs_result = rs_detector.detect_for_video(mp_rs_image, timestamp)
-            oak_result = oak_detector.detect_for_video(mp_oak_image, timestamp)
-            #rs_result = rs_detector.detect(mp_rs_image)
-            #oak_result = oak_detector.detect(mp_oak_image)
-
-            if rs_result.pose_landmarks and oak_result.pose_landmarks:
-                result_queue.put((rs_result, oak_result))
-                if result_queue.qsize() > 1:
-                    result_queue.get()
-
-        time.sleep(0.0001)
-
-def detect_hand_landmarks(rs_detector, oak_detector, input_queue, result_queue, image_format="bgr"):
-    while True:
-        if not input_queue.empty():
-            rs_color_img, oak_color_img, timestamp = input_queue.get()
-
-            processed_rs_img = np.copy(rs_color_img) 
-            processed_oak_img = np.copy(oak_color_img)
-            if image_format == "bgr":
-                processed_rs_img = cv2.cvtColor(processed_rs_img, cv2.COLOR_BGR2RGB)
-                processed_oak_img = cv2.cvtColor(processed_oak_img, cv2.COLOR_BGR2RGB)
-
-            mp_rs_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_rs_img)
-            mp_oak_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=processed_oak_img)
-
-            rs_result = rs_detector.detect_for_video(mp_rs_image, timestamp)
-            oak_result = oak_detector.detect_for_video(mp_oak_image, timestamp)
-
-            if rs_result.hand_landmarks and oak_result.hand_landmarks:
-                result_queue.put((rs_result, oak_result))
-                if result_queue.qsize() > 1:
-                    result_queue.get()
-
-        time.sleep(0.0001)
-
 def get_normalized_and_world_pose_landmarks(detection_result):
     pose_landmarks_list = detection_result.pose_landmarks
     pose_world_landmarks_list = detection_result.pose_world_landmarks
@@ -474,3 +424,48 @@ def get_xyZ(landmarks, depth, frame_size, sliding_window_size, landmark_ids_to_g
     Z = get_depth(xy_unnorm, depth, sliding_window_size)
     xyZ = np.concatenate([xy_unnorm, Z[:, None]], axis=-1)
     return xyZ
+
+def flatten_two_camera_input(left_camera_landmarks_xyZ,
+    right_camera_landmarks_xyZ,
+    left_camera_intr,
+    right_camera_intr,
+    right_2_left_matrix,
+    img_size,
+    timestamp=None,
+    output_landmarks=None,
+    output_xyz_origin=None,
+    mode="input"):
+    assert mode in ["input", "ground_truth"]
+    left_camera_norm_xyZ = left_camera_landmarks_xyZ.copy()
+    right_camera_norm_xyZ = right_camera_landmarks_xyZ.copy()
+
+    left_camera_norm_xyZ[:, 0] = left_camera_landmarks_xyZ[:, 0] / img_size[0]
+    left_camera_norm_xyZ[:, 1] = left_camera_landmarks_xyZ[:, 1] / img_size[1]
+    right_camera_norm_xyZ[:, 0] = right_camera_landmarks_xyZ[:, 0] / img_size[0]
+    right_camera_norm_xyZ[:, 1] = right_camera_landmarks_xyZ[:, 1] / img_size[1]
+    left_input = np.concatenate([left_camera_norm_xyZ,
+        np.zeros((48 - left_camera_norm_xyZ.shape[0], 3))], axis=0)
+    right_input = np.concatenate([right_camera_norm_xyZ,
+        np.zeros((48 - right_camera_norm_xyZ.shape[0], 3))], axis=0)
+    left_input = left_input.T
+    right_input = right_input.T 
+
+    if mode == "input":
+        input_row = np.concatenate([left_input.flatten(),
+            left_camera_intr.flatten(),
+            right_input.flatten(),
+            right_camera_intr.flatten(),
+            right_2_left_matrix.flatten()])
+    else:
+        assert timestamp is not None
+        assert output_landmarks is not None
+        assert output_xyz_origin is not None
+        input_row = np.concatenate([[timestamp],
+            left_input.flatten(),
+            left_camera_intr.flatten(),
+            right_input.flatten(),
+            right_camera_intr.flatten(),
+            right_2_left_matrix.flatten(),
+            output_landmarks.T.flatten(),
+            output_xyz_origin.flatten()])
+    return input_row

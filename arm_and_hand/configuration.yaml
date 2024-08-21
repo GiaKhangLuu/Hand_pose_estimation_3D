@@ -1,5 +1,4 @@
 detection_phase:
-  frame_color_format: bgr
   hand_to_fuse: left
   arm_to_fuse: left
   num_person_to_detect: 1
@@ -8,6 +7,7 @@ detection_phase:
     - mmpose
   model_selection_id: 0
   mediapipe:
+    convert_color_channel: true
     hand_detection:
       is_enable: true
       min_detection_confidence: 0.3
@@ -78,6 +78,8 @@ detection_phase:
         - left foot index
         - right foot index
   mmpose:
+    convert_color_channel: false
+    landmark_threshold_to_draw: 0.5
     person_detection:
       is_enable: true
       person_detector_config: /home/giakhang/dev/pose_sandbox/mmpose/projects/rtmpose/rtmdet/person/rtmdet_nano_320-8xb32_coco-person.py
@@ -88,6 +90,10 @@ detection_phase:
       left_camera_pose_estimator_weight: /home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth
       right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/mmpose/configs/wholebody_2d_keypoint/rtmpose/coco-wholebody/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py
       right_camera_pose_estimator_weight: /home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth
+      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/rtmpose-m_4_left_cam.py
+      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/best_left_camera_rtmpose-m_weight.pth
+      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/rtmpose-m_4_right_cam.py
+      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/best_right_camera_rtmpose-m_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -118,12 +124,19 @@ detection_phase:
 
 fusing_phase:
   fusing_methods:
-    - deep_learning
-    - optimization
+    - transformer_encoder
+    - minimize_distance
   fusing_selection_id: 0
-  deep_learning: 
-    model_weight: None
-  optimization:
+  transformer_encoder: 
+    sequence_length: 5
+    input_dim: 322
+    output_dim: 153
+    num_heads: 7
+    num_encoder_layers: 6
+    dim_feedforward: 512
+    dropout: 0.1
+    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/best_model_2024-08-15-14:03.pth
+  minimize_distance:
     algo_name: L-BFGS-B
     tolerance: 1e-10
 
@@ -146,9 +159,9 @@ process_frame:
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
   save_angles: false
-  save_images: true
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: false
 
 debugging_mode:
   draw_xyz: false
