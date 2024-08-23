@@ -6,3 +6,5 @@ hand_landmarks/neural_networks/weights
 hand_landmarks/neural_networks/mlp_v2_weights
 
 arm_and_hand/data/
+
+model_zoo

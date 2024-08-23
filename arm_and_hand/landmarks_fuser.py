@@ -13,7 +13,7 @@ class LandmarksFuser:
     """
 
     def __init__(self, method_selected_id, method_list,
-        method_config, arm_hand_fused_names, img_size):
+        method_config, img_size):
         """
         Desc.
 
@@ -23,7 +23,6 @@ class LandmarksFuser:
         """
         self._method_name = method_list[method_selected_id]
         config_by_method = method_config[self._method_name]
-        self._arm_hand_fused_names = arm_hand_fused_names
 
         if self._method_name == "transformer_encoder":
             # ------------ INIT TRANSFORMER ENCODER ------------
@@ -80,6 +79,9 @@ class LandmarksFuser:
                     x = x.to("cuda")
                     y = self._fusing_model(x)
                     y = y.detach().to("cpu").numpy()[0]
+                # FIX THIS ONE WHEN DONE MANUAL LABEL FOR FUSING MODEL
+                # FOR NOW, THE MODEL SHOULD RETURN XYZ, MANUAL CONVERT
+                # TO WRIST COORDINATE
                 arm_hand_XYZ_wrt_shoulder = y[:144]
                 xyz_origin = y[144:]
                 arm_hand_XYZ_wrt_shoulder = arm_hand_XYZ_wrt_shoulder.reshape(3, 48)
@@ -93,7 +95,7 @@ class LandmarksFuser:
                 right_camera_intr,
                 left_camera_intr,
                 right_2_left_matrix)
-            arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
-                arm_hand_fused_XYZ,
-                self._arm_hand_fused_names)
-        return arm_hand_XYZ_wrt_shoulder, xyz_origin
+            #arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
+                #arm_hand_fused_XYZ,
+                #self._arm_hand_fused_names)
+        return arm_hand_fused_XYZ

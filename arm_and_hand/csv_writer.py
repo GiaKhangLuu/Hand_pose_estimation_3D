@@ -37,7 +37,7 @@ def split_train_test_val(filename):
     val_df.to_csv(val_path, index=False)
     test_df.to_csv(test_path, index=False)
 
-fusion_csv_columns_names = ["timestamp",
+fusion_csv_columns_name = ["timestamp",
     "left_shoulder_cam_left_x",
     "left_elbow_cam_left_x",
     "left_hip_cam_left_x",
@@ -503,13 +503,4 @@ fusion_csv_columns_names = ["timestamp",
     "right_pinky_mcp_output_z",
     "right_pinky_pip_output_z",
     "right_pinky_dip_output_z",
-    "right_pinky_tip_output_z",
-    "x_unit_x",
-    "y_unit_x",
-    "z_unit_x",
-    "x_unit_y",
-    "y_unit_y",
-    "z_unit_y",
-    "x_unit_z",
-    "y_unit_z",
-    "z_unit_z"]
+    "right_pinky_tip_output_z"]

@@ -135,7 +135,7 @@ def get_landmarks_name_based_on_arm(arm_to_get="left"):
 	assert arm_to_get in ["left", "right"]
 
 	landmarks_name = ["left shoulder", "left elbow", "left hip"]
-	landmarks_to_visualize = ["right shoulder", "right hip"]
+	landmarks_to_visualize = ["right shoulder", "right hip", "right elbow"]
 
 	if arm_to_get == "right":
 		landmarks_name = [name.replace("left", "right") for name in landmarks_name]

@@ -5,7 +5,7 @@ detection_phase:
   model_list:
     - mediapipe
     - mmpose
-  model_selection_id: 0
+  model_selection_id: 1
   mediapipe:
     convert_color_channel: true
     hand_detection:
@@ -14,7 +14,7 @@ detection_phase:
       min_presence_confidence: 0.3
       min_tracking_confidence: 0.3
       num_hand: 2
-      model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/hand_landmarker.task
+      model_asset_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mediapipe/hand/hand_landmarker.task
       hand_landmarks:
         - WRIST
         - THUMB_CMC
@@ -42,7 +42,7 @@ detection_phase:
       min_detection_confidence: 0.5
       min_tracking_confidence: 0.5
       visibility_threshold: 0.2
-      model_asset_path: /home/giakhang/dev/Hand_pose_estimation_3D/model_path/pose_landmarker_lite.task
+      model_asset_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mediapipe/pose/pose_landmarker_lite.task
       body_landmarks:
         - nose
         - left eye (inner)
@@ -79,21 +79,21 @@ detection_phase:
         - right foot index
   mmpose:
     convert_color_channel: false
-    landmark_threshold_to_draw: 0.5
+    landmark_threshold_to_draw: 0.95
     person_detection:
       is_enable: true
-      person_detector_config: /home/giakhang/dev/pose_sandbox/mmpose/projects/rtmpose/rtmdet/person/rtmdet_nano_320-8xb32_coco-person.py
-      person_detector_weight: https://download.openmmlab.com/mmpose/v1/projects/rtmpose/rtmdet_nano_8xb32-100e_coco-obj365-person-05d8511e.pth
+      person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
+      person_detector_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_weight.pth
     pose_estimation:
       is_enable: true
-      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/mmpose/configs/wholebody_2d_keypoint/rtmpose/coco-wholebody/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py
-      left_camera_pose_estimator_weight: /home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth
-      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/mmpose/configs/wholebody_2d_keypoint/rtmpose/coco-wholebody/rtmpose-m_8xb64-270e_coco-wholebody-256x192.py
-      right_camera_pose_estimator_weight: /home/giakhang/Downloads/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.pth
-      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/rtmpose-m_4_left_cam.py
-      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/best_left_camera_rtmpose-m_weight.pth
-      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/rtmpose-m_4_right_cam.py
-      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/best_right_camera_rtmpose-m_weight.pth
+      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_weight.pth
+      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_weight.pth
+      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_22_left_camera_weight.pth
+      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -121,12 +121,13 @@ detection_phase:
     - PINKY_PIP
     - PINKY_DIP
     - PINKY_TIP
+    - right elbow
 
 fusing_phase:
   fusing_methods:
     - transformer_encoder
     - minimize_distance
-  fusing_selection_id: 0
+  fusing_selection_id: 1
   transformer_encoder: 
     sequence_length: 5
     input_dim: 322
@@ -161,7 +162,7 @@ utilities:
   plot_3d: true              # Plot the hand landmarks on open3d
   save_angles: false
   save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: false
+  save_images: true
 
 debugging_mode:
   draw_xyz: false

@@ -66,8 +66,9 @@ class LandmarksDetectors:
             self._hand_to_fuse = "Left" if hand_to_fuse else "Right"  # Currently select left or right (fix this if get both left and right)
             body_landmarks_names_want_to_get = get_landmarks_name_based_on_arm(arm_to_fuse)
             self._body_landmarks_id_want_to_get = [body_landmarks_name.index(name) for name in body_landmarks_names_want_to_get]
-            self._body_hand_fused_names = body_landmarks_names_want_to_get.copy()
+            self._body_hand_fused_names = body_landmarks_names_want_to_get[:-1].copy()  # remove right_elbow
             self._body_hand_fused_names.extend(hand_landmarks_name)
+            self._body_hand_fused_names.append(body_landmarks_names_want_to_get[-1])  # append right_elbow back
 
             assert self._body_hand_fused_names == self._fusing_landmark_names
 
@@ -106,7 +107,7 @@ class LandmarksDetectors:
             # -------------- INIT MMPOSE MODELS -------------- 
             self._mmpose_selected_landmarks_id = [5, 7, 11, 6, 12, 91, 92, 93, 94, 95, 
                 96, 97, 98, 99, 100, 101, 102, 103, 104, 
-                105, 106, 107, 108, 109, 110, 111]
+                105, 106, 107, 108, 109, 110, 111, 8]
             self._mmpose_cvt_color = config_by_model["convert_color_channel"]
             self._person_detection_activation = config_by_model["person_detection"]["is_enable"]
             person_detector_config = config_by_model["person_detection"]["person_detector_config"]
@@ -216,7 +217,9 @@ class LandmarksDetectors:
                 hand_landmarks_xyZ is not None and
                 not np.isnan(hand_landmarks_xyZ).any() and
                 len(hand_landmarks_xyZ) > 0):
-                body_hand_selected_xyZ = np.concatenate([body_landmarks_xyZ, hand_landmarks_xyZ], axis=0)
+                body_hand_selected_xyZ = np.concatenate([body_landmarks_xyZ[:-1, :], # add right_elow after left_hand
+                    hand_landmarks_xyZ,
+                    body_landmarks_xyZ[-1, :][None, :]], axis=0)
         else:
             # -------------- MMPOSE DETECTION -------------- 
             person_detector, wholebody_detector = None, None

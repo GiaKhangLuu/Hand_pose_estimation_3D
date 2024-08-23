@@ -3,6 +3,7 @@ import cv2
 import glob
 import os
 import matplotlib.pyplot as plt
+import shutil
 
 def calibrate(cam, is_found_in_both_cams, showPics=True):
     # Read Image
@@ -58,13 +59,20 @@ def calibrate(cam, is_found_in_both_cams, showPics=True):
 
     # Save Calibration Parameters (later video)
     curFolder = os.path.dirname(os.path.abspath(__file__))
-    paramPath = os.path.join(curFolder, '{}_calibration.npz'.format(cam))
+    calib_filename = '{}_calibration.npz'.format(cam)
+    paramPath = os.path.join(curFolder, calib_filename)
     np.savez(paramPath,
             repError=repError,
             camMatrix=camMatrix, 
             distCoeff=distCoeff,
             rvecs=rvecs,
             tvecs=tvecs)
+
+    tomo_imaging_calib_dir = "/home/giakhang/tomo2_imaging/src/tomo_operator_control/tomo_operator_control/configurations/camera"
+    tomo_imaging_calib_path = os.path.join(tomo_imaging_calib_dir, calib_filename)
+    if os.path.exists(tomo_imaging_calib_path):
+        os.remove(tomo_imaging_calib_path)
+    shutil.copy(paramPath, tomo_imaging_calib_dir)
 
     return camMatrix
 

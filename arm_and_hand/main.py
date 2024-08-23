@@ -24,7 +24,7 @@ from stream_3d import visualize_arm, visualize_hand
 from angle_calculation import get_angles_between_joints
 from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_on_image
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
-from csv_writer import create_csv, append_to_csv, fusion_csv_columns_names, split_train_test_val
+from csv_writer import create_csv, append_to_csv, fusion_csv_columns_name, split_train_test_val
 from utilities import (get_normalized_and_world_pose_landmarks,
     get_normalized_and_world_hand_landmarks,
     get_normalized_hand_landmarks,
@@ -122,8 +122,7 @@ hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks 
 landmarks_detectors = LandmarksDetectors(detection_model_selection_id, 
     detection_model_list, config["detection_phase"], draw_landmarks)
 landmarks_fuser = LandmarksFuser(fusing_method_selection_id,
-    fusing_method_list, config["fusing_phase"], 
-    arm_hand_fused_names, frame_size)
+    fusing_method_list, config["fusing_phase"], frame_size)
 
 if __name__ == "__main__":
     if (save_landmarks or
@@ -131,7 +130,7 @@ if __name__ == "__main__":
         save_images):
         current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
         current_date = datetime.now().strftime('%Y-%m-%d')
-        DATA_DIR = os.path.join("data", current_date)
+        DATA_DIR = os.path.join(CURRENT_DIR, "../..", "data", current_date)
         if not os.path.exists(DATA_DIR):
             os.mkdir(DATA_DIR)
         DATA_DIR = os.path.join(DATA_DIR, current_time)
@@ -227,11 +226,16 @@ if __name__ == "__main__":
                 right_camera_body_landmarks_xyZ is not None and
                 left_camera_body_landmarks_xyZ.shape[0] == len(arm_hand_fused_names) and
                 left_camera_body_landmarks_xyZ.shape[0] == right_camera_body_landmarks_xyZ.shape[0]):
-                arm_hand_XYZ_wrt_shoulder, xyz_origin = landmarks_fuser.fuse(left_camera_body_landmarks_xyZ,
+                # JUST FUSE TO XYZ, MANUAL CONVERT TO SHOULDER_COORDINATE
+                arm_hand_fused_XYZ = landmarks_fuser.fuse(left_camera_body_landmarks_xyZ,
                     right_camera_body_landmarks_xyZ,
                     left_camera_intr,
                     right_camera_intr,
                     right_2_left_mat_avg)
+
+                arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
+                    arm_hand_fused_XYZ,
+                    arm_hand_fused_names)
 
                 if (arm_hand_XYZ_wrt_shoulder is not None and
                     xyz_origin is not None):
@@ -250,7 +254,7 @@ if __name__ == "__main__":
 
                         append_to_csv(LANDMARK_CSV_PATH, input_row)
             
-                    if save_images:
+                    if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
                         left_img_path = os.path.join(IMAGE_DIR, "left_{}.jpg".format(timestamp))
                         right_img_path = os.path.join(IMAGE_DIR, "right_{}.jpg".format(timestamp))
                         cv2.imwrite(left_img_path, left_image_to_save)
