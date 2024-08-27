@@ -18,9 +18,7 @@ from mediapipe.framework.formats import landmark_pb2
 
 from utilities import (get_normalized_hand_landmarks,
     get_normalized_pose_landmarks,
-    get_landmarks_name_based_on_arm,
-    get_mediapipe_world_landmarks,
-    xyZ_to_XYZ)
+    get_landmarks_name_based_on_arm)
 from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_on_image
 from common import (get_xyZ,
     get_depth)
@@ -94,7 +92,7 @@ class LandmarksDetectors:
                 body_options = vision.PoseLandmarkerOptions(
                     base_options=body_base_options,
                     running_mode=mp.tasks.vision.RunningMode.VIDEO,
-                    num_poses=self._num_person_to_detect,
+                    num_poses=self._num_person_to_detect,  
                     min_pose_detection_confidence=body_min_det_conf,
                     min_tracking_confidence=body_min_tracking_conf,
                     output_segmentation_masks=False)
@@ -139,7 +137,7 @@ class LandmarksDetectors:
                 self._right_camera_pose_estimator is not None):
                 self._left_camera_pose_estimator.cfg.visualizer.line_width = 2
                 self._right_camera_pose_estimator.cfg.visualizer.line_width = 2
-                self._landmarks_threshold_to_draw = config_by_model["landmark_threshold_to_draw"]
+                self._landmarks_thres = config_by_model["landmark_thresh"]
 
                 # build the visualizer
                 self._left_camera_mmpose_visualizer = VISUALIZERS.build(
@@ -152,7 +150,7 @@ class LandmarksDetectors:
                     self._left_camera_pose_estimator.dataset_meta)
                 self._right_camera_mmpose_visualizer.set_dataset_meta(
                     self._right_camera_pose_estimator.dataset_meta)
-
+    
     def detect(self, img, depth_map, timestamp, side):
         assert side in ["left", "right"]
         img_size = img.shape[:-1]
@@ -203,8 +201,9 @@ class LandmarksDetectors:
 
             if body_landmarks:
                 if self._num_person_to_detect == 1:
+                    # Get pose with highest area
                     body_landmarks = body_landmarks[0]
-
+                
                 body_landmarks_xyZ = get_xyZ(body_landmarks, 
                     img_size, 
                     self._body_landmarks_id_want_to_get,
@@ -236,9 +235,12 @@ class LandmarksDetectors:
                 bboxes = bboxes[np.logical_and(pred_instance.labels == 0,
                     pred_instance.scores > 0.6)]
                 bboxes = bboxes[nms(bboxes, 0.3), :]
-                if bboxes.size > 0 and self._num_person_to_detect == 1:
-                    bboxes = bboxes[np.argmax(bboxes[:, -1])]
-                    bboxes = bboxes[None, :-1]
+                """Now we dont get a box with highest score, we should get box with 
+                highest area"""
+                if bboxes.size > 0:
+                    areas = (bboxes[:, 2] - bboxes[:, 0]) * (bboxes[:, 3] - bboxes[:, 1])
+                    largest_area_index = np.argmax(areas)
+                    bboxes = bboxes[largest_area_index, :-1][None, :]
             if self._pose_estimation_activation:
                 wholebody_detector = self._left_camera_pose_estimator if side == "left" else self._right_camera_pose_estimator
                 if self._draw_landmarks:
@@ -254,7 +256,11 @@ class LandmarksDetectors:
                 wholebody_preds = wholebody_det_rs.get("pred_instances", None)
                 if wholebody_preds is not None:
                     wholebody_landmarks = wholebody_preds.keypoints[0]
+                    wholebody_landmarks_score = wholebody_preds.keypoint_scores[0]
+                    selected_score =  wholebody_landmarks_score[self._mmpose_selected_landmarks_id]
+                    mask = selected_score > self._landmarks_thres
                     body_hand_selected_xyZ = wholebody_landmarks[self._mmpose_selected_landmarks_id]
+                    body_hand_selected_xyZ = body_hand_selected_xyZ[mask]
 
                 landmarks_depth = get_depth(body_hand_selected_xyZ, depth_map, 9)
                 body_hand_selected_xyZ = np.concatenate([body_hand_selected_xyZ, landmarks_depth[:, None]], axis=-1)
@@ -271,7 +277,7 @@ class LandmarksDetectors:
                         skeleton_style="mmpose",
                         show=False,
                         wait_time=0,
-                        kpt_thr=self._landmarks_threshold_to_draw
+                        kpt_thr=self._landmarks_thres
                     )
 
         detection_result = {"detection_result": body_hand_selected_xyZ,

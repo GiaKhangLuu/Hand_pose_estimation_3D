@@ -15,8 +15,9 @@ class TransformerEncoder(nn.Module):
     def forward(self, src):
         # src is of shape [seq_len, batch_size, input_dim]
         memory = self.encoder(src)
+        memory = memory[-1]  # just take the last one in sequence
         # Only take the output corresponding to the last frame in the sequence
-        output = self.fc(memory[-1])  # [batch_size, input_dim] -> [batch_size, output_dim]
+        output = self.fc(memory)  # [batch_size, input_dim] -> [batch_size, output_dim]
         return output
 
 if __name__ == "__main__":

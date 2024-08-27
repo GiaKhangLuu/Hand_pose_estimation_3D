@@ -504,3 +504,18 @@ fusion_csv_columns_name = ["timestamp",
     "right_pinky_pip_output_z",
     "right_pinky_dip_output_z",
     "right_pinky_tip_output_z"]
+
+arm_angles_name = ["timestamp",
+    "raw_joint1",
+    "raw_joint2",
+    "raw_joint3",
+    "raw_joint4",
+    "raw_joint5",
+    "raw_joint6",
+    "smooth_joint1",
+    "smooth_joint2",
+    "smooth_joint3",
+    "smooth_joint4",
+    "smooth_joint5",
+    "smooth_joint6",
+    "elapsed_time"]

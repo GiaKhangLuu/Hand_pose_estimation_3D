@@ -17,29 +17,26 @@ import queue
 import threading
 import time
 import shutil
+import socket
+import math
 from filterpy.kalman import KalmanFilter
 from datetime import datetime
 
 from stream_3d import visualize_arm, visualize_hand
 from angle_calculation import get_angles_between_joints
-from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_on_image
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
-from csv_writer import create_csv, append_to_csv, fusion_csv_columns_name, split_train_test_val
-from utilities import (get_normalized_and_world_pose_landmarks,
-    get_normalized_and_world_hand_landmarks,
-    get_normalized_hand_landmarks,
-    get_normalized_pose_landmarks,
-    get_landmarks_name_based_on_arm,
-    fuse_landmarks_from_two_cameras,
-    convert_to_shoulder_coord,
+from csv_writer import (create_csv, 
+    append_to_csv, 
+    fusion_csv_columns_name, 
+    split_train_test_val,
+    arm_angles_name)
+from utilities import (convert_to_shoulder_coord,
     convert_to_wrist_coord,
-    get_mediapipe_world_landmarks,
-    xyZ_to_XYZ,
     flatten_two_camera_input)
+from kalman_filter import predict_and_correct
 from common import (load_data_from_npz_file,
     get_oak_2_rs_matrix,
-    load_config,
-    get_xyZ)
+    load_config)
 from landmarks_detectors import LandmarksDetectors
 from landmarks_fuser import LandmarksFuser
 
@@ -57,6 +54,8 @@ frame_size = (config["process_frame"]["frame_size"]["width"],
 frame_calibrated_size = (config["camera"]["frame_calibrated_size"]["height"],
     config["camera"]["frame_calibrated_size"]["width"])
 
+limit_angles = config["angle_limitation"]["enable"]
+send_udp = config["send_udp"]
 plot_3d = config["utilities"]["plot_3d"]
 draw_landmarks = config["utilities"]["draw_landmarks"]
 save_landmarks = config["utilities"]["save_landmarks"]
@@ -67,6 +66,7 @@ detection_model_selection_id = config["detection_phase"]["model_selection_id"]
 detection_model_list = tuple(config["detection_phase"]["model_list"])
 arm_hand_fused_names = config["detection_phase"]["fusing_landmark_dictionary"]
 
+fusing_enable = config["fusing_phase"]["enable"]
 fusing_method_list = tuple(config["fusing_phase"]["fusing_methods"])
 fusing_method_selection_id = config["fusing_phase"]["fusing_selection_id"]
 
@@ -80,7 +80,43 @@ debug_angle_j6 = config["debugging_mode"]["show_left_arm_angle_j6"]
 ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
+joint1_min = config["angle_limitation"]["angle_joint1"]["min"]
+joint1_max = config["angle_limitation"]["angle_joint1"]["max"]
+joint2_min = config["angle_limitation"]["angle_joint2"]["min"]
+joint2_max = config["angle_limitation"]["angle_joint2"]["max"]
+joint3_min = config["angle_limitation"]["angle_joint3"]["min"]
+joint3_max = config["angle_limitation"]["angle_joint3"]["max"]
+joint4_min = config["angle_limitation"]["angle_joint4"]["min"]
+joint4_max = config["angle_limitation"]["angle_joint4"]["max"]
+joint5_min = config["angle_limitation"]["angle_joint5"]["min"]
+joint5_max = config["angle_limitation"]["angle_joint5"]["max"]
+joint6_min = config["angle_limitation"]["angle_joint6"]["min"]
+joint6_max = config["angle_limitation"]["angle_joint6"]["max"]
+angles_min = [joint1_min, joint2_min, joint3_min, joint4_min, joint5_min, joint6_min]
+angles_max = [joint1_max, joint2_max, joint3_max, joint4_max, joint5_max, joint6_max]
+
 use_fusing_network = fusing_method_list[fusing_method_selection_id] != "minimize_distance" 
+
+start_time_sending_udp = None
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server_ip = config["socket"]["server_ip"]
+server_port = config["socket"]["server_port"]
+
+run_to_collect_data = config["run_to_collect_data_for_fusing_and_detection"]
+
+if run_to_collect_data:
+    plot_3d = True
+    send_udp = False
+    save_landmarks = True
+    save_images = True
+    detection_model_selection_id = 0
+    fusing_enable = True
+    fusing_method_selection_id = 1
+    use_fusing_network = False
+    config["detection_phase"]["mediapipe"]["hand_detection"]["is_enable"] = True
+    config["detection_phase"]["mediapipe"]["body_detection"]["is_enable"] = True
+    config["fusing_phase"]["minimize_distance"]["tolerance"] = 1e-10
+
 
 if (use_fusing_network):
     save_landmarks = False
@@ -91,6 +127,26 @@ left_cam_data = load_data_from_npz_file(left_cam_calib_path)
 
 right_oak_r_raw, right_oak_t_raw, right_camera_intr = right_cam_data['rvecs'], right_cam_data['tvecs'], right_cam_data['camMatrix']
 left_oak_r_raw, left_oak_t_raw, left_camera_intr = left_cam_data['rvecs'], left_cam_data['tvecs'], left_cam_data['camMatrix']
+
+def degree_to_radian(degrees):
+    radians = degrees * math.pi / 180 
+    return radians
+
+def send_udp_message(arm_angles, degrees=True):
+    global start_time_sending_udp
+    if start_time_sending_udp is None:
+        start_time_sending_udp = time.time()
+        return None
+    if degrees:
+        arm_angles = degree_to_radian(arm_angles)
+    end_time_sending_udp = time.time()
+    elapsed_time = end_time_sending_udp - start_time_sending_udp
+    start_time_sending_udp = end_time_sending_udp
+    arm_angles = arm_angles.tolist()
+    arm_angles.append(elapsed_time)
+    message = str(arm_angles)
+    client_socket.sendto(message.encode(), (server_ip, server_port))
+    return elapsed_time
 
 def _scale_intrinsic_by_res(intrinsic, original_size, processed_size):
     """
@@ -124,6 +180,12 @@ landmarks_detectors = LandmarksDetectors(detection_model_selection_id,
 landmarks_fuser = LandmarksFuser(fusing_method_selection_id,
     fusing_method_list, config["fusing_phase"], frame_size)
 
+arm_angles_predictions, arm_sigmas_predictions = [], []
+num_joints = 6
+for i in range(num_joints):
+    arm_angles_predictions.append(np.array([[0]]))
+    arm_sigmas_predictions.append(np.array([[1]]))
+
 if __name__ == "__main__":
     if (save_landmarks or
         save_angles or
@@ -138,11 +200,15 @@ if __name__ == "__main__":
         
         if save_landmarks:
             LANDMARK_CSV_PATH = os.path.join(DATA_DIR, "landmarks_all_{}.csv".format(current_time))
-            create_csv(LANDMARK_CSV_PATH, fusion_csv_columns_names)
+            create_csv(LANDMARK_CSV_PATH, fusion_csv_columns_name)
 
         if save_images:
             IMAGE_DIR = os.path.join(DATA_DIR, "image") 
             os.mkdir(IMAGE_DIR)
+
+        if save_angles:
+            ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "arm_angle_{}.csv".format(current_time))
+            create_csv(ARM_ANGLE_CSV_PATH, arm_angles_name)
 
     pipeline_left_oak = initialize_oak_cam()
     pipeline_right_oak = initialize_oak_cam()
@@ -152,24 +218,23 @@ if __name__ == "__main__":
     right_oak_thread = threading.Thread(target=stream_oak, args=(pipeline_right_oak,  
         right_frame_getter_queue, right_oak_mxid), daemon=True)
 
-    vis_arm_thread = threading.Thread(target=visualize_arm,
-        args=(arm_points_vis_queue, 
-            arm_hand_fused_names,
-            debug_angle_j1,
-            debug_angle_j2,
-            debug_angle_j3,
-            debug_angle_j4,
-            debug_angle_j5,
-            debug_angle_j6,
-            draw_xyz,
-            True,
-            joint_vector_color,
-            ref_vector_color,),
-        daemon=True)
-
     left_oak_thread.start()
     right_oak_thread.start()
     if plot_3d:
+        vis_arm_thread = threading.Thread(target=visualize_arm,
+            args=(arm_points_vis_queue, 
+                arm_hand_fused_names,
+                debug_angle_j1,
+                debug_angle_j2,
+                debug_angle_j3,
+                debug_angle_j4,
+                debug_angle_j5,
+                debug_angle_j6,
+                draw_xyz,
+                True,
+                joint_vector_color,
+                ref_vector_color,),
+            daemon=True)
         vis_arm_thread.start()
         #vis_hand_thread.start()
 
@@ -196,114 +261,143 @@ if __name__ == "__main__":
         #kalman_filters.append(f)
 
     input_frames = []
-    try:
-        while True:
-            left_camera_body_landmarks_xyZ, right_camera_body_landmarks_xyZ = None, None
-            # Get and preprocess rgb and its depth
-            left_rgb, left_depth = left_frame_getter_queue.get()
-            right_rgb, right_depth = right_frame_getter_queue.get()
+    while True:
+        left_camera_body_landmarks_xyZ, right_camera_body_landmarks_xyZ = None, None
+        # Get and preprocess rgb and its depth
+        left_rgb, left_depth = left_frame_getter_queue.get()
+        right_rgb, right_depth = right_frame_getter_queue.get()
 
-            left_rgb = cv2.resize(left_rgb, frame_size)
-            right_rgb = cv2.resize(right_rgb, frame_size)
-            left_depth = cv2.resize(left_depth, frame_size)
-            right_depth = cv2.resize(right_depth, frame_size)
+        left_rgb = cv2.resize(left_rgb, frame_size)
+        right_rgb = cv2.resize(right_rgb, frame_size)
+        left_depth = cv2.resize(left_depth, frame_size)
+        right_depth = cv2.resize(right_depth, frame_size)
 
-            left_image_to_save = np.copy(left_rgb)
-            right_image_to_save = np.copy(right_rgb)
+        left_image_to_save = np.copy(left_rgb)
+        right_image_to_save = np.copy(right_rgb)
 
-            # Detection phase
-            left_det_rs = landmarks_detectors.detect(left_rgb, left_depth, timestamp, side="left")
-            right_det_rs = landmarks_detectors.detect(right_rgb, right_depth, timestamp, side="right")
+        # Detection phase
+        left_det_rs = landmarks_detectors.detect(left_rgb, left_depth, timestamp, side="left")
+        right_det_rs = landmarks_detectors.detect(right_rgb, right_depth, timestamp, side="right")
 
-            left_camera_body_landmarks_xyZ = left_det_rs["detection_result"]
-            right_camera_body_landmarks_xyZ = right_det_rs["detection_result"]
-            if draw_landmarks:
-                left_rgb = left_det_rs["drawed_img"]
-                right_rgb = right_det_rs["drawed_img"]
+        left_camera_body_landmarks_xyZ = left_det_rs["detection_result"]
+        right_camera_body_landmarks_xyZ = right_det_rs["detection_result"]
+        if draw_landmarks:
+            left_rgb = left_det_rs["drawed_img"]
+            right_rgb = right_det_rs["drawed_img"]
 
-            # Fusing phase
-            if (left_camera_body_landmarks_xyZ is not None and 
-                right_camera_body_landmarks_xyZ is not None and
-                left_camera_body_landmarks_xyZ.shape[0] == len(arm_hand_fused_names) and
-                left_camera_body_landmarks_xyZ.shape[0] == right_camera_body_landmarks_xyZ.shape[0]):
-                # JUST FUSE TO XYZ, MANUAL CONVERT TO SHOULDER_COORDINATE
-                arm_hand_fused_XYZ = landmarks_fuser.fuse(left_camera_body_landmarks_xyZ,
-                    right_camera_body_landmarks_xyZ,
-                    left_camera_intr,
-                    right_camera_intr,
-                    right_2_left_mat_avg)
+        # Fusing phase
+        if (fusing_enable and
+            left_camera_body_landmarks_xyZ is not None and 
+            right_camera_body_landmarks_xyZ is not None and
+            left_camera_body_landmarks_xyZ.shape[0] == len(arm_hand_fused_names) and
+            left_camera_body_landmarks_xyZ.shape[0] == right_camera_body_landmarks_xyZ.shape[0]):
+            # JUST FUSE TO XYZ, MANUAL CONVERT TO SHOULDER_COORDINATE
+            arm_hand_fused_XYZ = landmarks_fuser.fuse(left_camera_body_landmarks_xyZ,
+                right_camera_body_landmarks_xyZ,
+                left_camera_intr,
+                right_camera_intr,
+                right_2_left_mat_avg)
 
-                arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
-                    arm_hand_fused_XYZ,
-                    arm_hand_fused_names)
+            arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
+                arm_hand_fused_XYZ,
+                arm_hand_fused_names)
 
-                if (arm_hand_XYZ_wrt_shoulder is not None and
-                    xyz_origin is not None):
-                    if save_landmarks:
-                        output_landmarks = np.concatenate([arm_hand_XYZ_wrt_shoulder, np.zeros((48 - arm_hand_XYZ_wrt_shoulder.shape[0], 3))])
-                        input_row = flatten_two_camera_input(left_camera_body_landmarks_xyZ,
-                            right_camera_body_landmarks_xyZ,
-                            left_camera_intr,
-                            right_camera_intr,
-                            right_2_left_mat_avg,
-                            frame_size,
-                            mode="ground_truth",
-                            timestamp=timestamp,
-                            output_landmarks=output_landmarks,
-                            output_xyz_origin=xyz_origin)
+            if (arm_hand_XYZ_wrt_shoulder is not None and
+                xyz_origin is not None):
 
-                        append_to_csv(LANDMARK_CSV_PATH, input_row)
+                arm_angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, 
+                    arm_hand_fused_names, xyz_origin)
+
+                angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = arm_angles
+                arm_angles = np.array([angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6])
+
+                if limit_angles:
+                    arm_angles = np.clip(arm_angles, angles_min, angles_max) 
+
+                filter_angles = []
+                for i in range(len(arm_angles_predictions)):
+                    measured_angle_joint_i = arm_angles[i]
+                    previous_angle_joint_i = arm_angles_predictions[i]
+                    previous_sigma_joint_i = arm_sigmas_predictions[i]
+                    angle_prediction, sigma_prediction = predict_and_correct(measured_angle_joint_i, 
+                        previous_angle_joint_i, 
+                        previous_sigma_joint_i)
+                    arm_angles_predictions[i] = angle_prediction
+                    arm_sigmas_predictions[i] = sigma_prediction 
+                    filter_angles.append(angle_prediction.squeeze())
+
+                filter_angles = np.array(filter_angles)
+
+                elapsed_sending_data_time = None
+                if send_udp:
+                    elapsed_sending_data_time = send_udp_message(filter_angles, degrees=True)
+
+                if plot_3d: 
+                    arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))
+                    if arm_points_vis_queue.qsize() > 1:
+                        arm_points_vis_queue.get()
+
+                if save_angles and elapsed_sending_data_time:
+                    angles_writed_to_file = [timestamp] 
+                    angles_writed_to_file.extend(arm_angles.tolist())
+                    angles_writed_to_file.extend(filter_angles.tolist())
+                    angles_writed_to_file.append(elapsed_sending_data_time)
+                    append_to_csv(ARM_ANGLE_CSV_PATH, angles_writed_to_file)
+
+                if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
+                    output_landmarks = np.concatenate([arm_hand_XYZ_wrt_shoulder, np.zeros((48 - arm_hand_XYZ_wrt_shoulder.shape[0], 3))])
+                    input_row = flatten_two_camera_input(left_camera_body_landmarks_xyZ,
+                        right_camera_body_landmarks_xyZ,
+                        left_camera_intr,
+                        right_camera_intr,
+                        right_2_left_mat_avg,
+                        frame_size,
+                        mode="ground_truth",
+                        timestamp=timestamp,
+                        output_landmarks=output_landmarks,
+                        output_xyz_origin=xyz_origin)
+                    append_to_csv(LANDMARK_CSV_PATH, input_row)
             
-                    if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
-                        left_img_path = os.path.join(IMAGE_DIR, "left_{}.jpg".format(timestamp))
-                        right_img_path = os.path.join(IMAGE_DIR, "right_{}.jpg".format(timestamp))
-                        cv2.imwrite(left_img_path, left_image_to_save)
-                        cv2.imwrite(right_img_path, right_image_to_save)
-                        num_img_save += 1
+                if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
+                    left_img_path = os.path.join(IMAGE_DIR, "left_{}.jpg".format(timestamp))
+                    right_img_path = os.path.join(IMAGE_DIR, "right_{}.jpg".format(timestamp))
+                    cv2.imwrite(left_img_path, left_image_to_save)
+                    cv2.imwrite(right_img_path, right_image_to_save)
+                    num_img_save += 1
 
-                    #for i in range(len(arm_hand_fused_names)):
-                        #kalman_filter = kalman_filters[i]
-                        #landmarks = arm_hand_XYZ_wrt_shoulder[i]
-                        #kalman_filter.predict()
-                        #kalman_filter.update(landmarks.flatten())
-                        #smooth_landmark = kalman_filter.x
-                        #arm_hand_XYZ_wrt_shoulder[i, :] = smooth_landmark.reshape(1, 3) 
-                    angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, 
-                        arm_hand_fused_names, xyz_origin)
+                #for i in range(len(arm_hand_fused_names)):
+                    #kalman_filter = kalman_filters[i]
+                    #landmarks = arm_hand_XYZ_wrt_shoulder[i]
+                    #kalman_filter.predict()
+                    #kalman_filter.update(landmarks.flatten())
+                    #smooth_landmark = kalman_filter.x
+                    #arm_hand_XYZ_wrt_shoulder[i, :] = smooth_landmark.reshape(1, 3) 
 
-                    if plot_3d: 
-                        arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))
-                        if arm_points_vis_queue.qsize() > 1:
-                            arm_points_vis_queue.get()
+        frame_count += 1
+        elapsed_time = time.time() - start_time
 
-            frame_count += 1
-            elapsed_time = time.time() - start_time
+        # Update FPS every second
+        if elapsed_time >= 1.0:
+            fps = frame_count / elapsed_time
+            frame_count = 0
+            start_time = time.time()
 
-            # Update FPS every second
-            if elapsed_time >= 1.0:
-                fps = frame_count / elapsed_time
-                frame_count = 0
-                start_time = time.time()
+        timestamp += 1
 
-            timestamp += 1
+        frame_of_two_cam = np.vstack([left_rgb, right_rgb])
+        frame_of_two_cam = cv2.resize(frame_of_two_cam, (640, 720))
+        cv2.putText(frame_of_two_cam, f'FPS: {fps:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+        #rightside_rgb = cv2.resize(rightside_rgb, (960, 540))
+        #cv2.putText(rightside_rgb, f'FPS: {fps:.2f}', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 0), 4, cv2.LINE_AA)
 
-            frame_of_two_cam = np.vstack([left_rgb, right_rgb])
-            frame_of_two_cam = cv2.resize(frame_of_two_cam, (640, 720))
-            cv2.putText(frame_of_two_cam, f'FPS: {fps:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-            #rightside_rgb = cv2.resize(rightside_rgb, (960, 540))
-            #cv2.putText(rightside_rgb, f'FPS: {fps:.2f}', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 0), 4, cv2.LINE_AA)
+        cv2.imshow("Frame", frame_of_two_cam)
 
-            cv2.imshow("Frame", frame_of_two_cam)
-
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                cv2.destroyAllWindows()
-                break
-    except Exception as e:
-        print(e)
-    finally:
-        if save_landmarks:
-            split_train_test_val(LANDMARK_CSV_PATH)
-        if save_images and num_img_save == 0:
-            shutil.rmtree(DATA_DIR)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            cv2.destroyAllWindows()
+            break
+    if save_landmarks:
+        split_train_test_val(LANDMARK_CSV_PATH)
+    if save_images and num_img_save == 0:
+        shutil.rmtree(DATA_DIR)
 
     

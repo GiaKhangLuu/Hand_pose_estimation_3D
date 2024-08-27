@@ -211,6 +211,12 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
     for i in range(right_side_xyZ.shape[0]):
         right_side_i_xyZ, opposite_i_xyZ = right_side_xyZ[i], opposite_xyZ[i]
 
+        if (np.count_nonzero(right_side_i_xyZ) == 0 or 
+            np.count_nonzero(opposite_i_xyZ) == 0):
+            right_side_new_Z.append(0)
+            opposite_new_Z.append(0)
+            continue
+
         min_dis = partial(distance, 
 			right_side_xyZ=right_side_i_xyZ, 
 			opposite_xyZ=opposite_i_xyZ,
