@@ -452,8 +452,8 @@ def flatten_two_camera_input(left_camera_landmarks_xyZ,
         np.zeros((48 - left_camera_norm_xyZ.shape[0], 3))], axis=0)
     right_input = np.concatenate([right_camera_norm_xyZ,
         np.zeros((48 - right_camera_norm_xyZ.shape[0], 3))], axis=0)
-    left_input = left_input.T
-    right_input = right_input.T 
+    left_input = left_input.T  # shape: (3, 48)
+    right_input = right_input.T  # shape: (3, 48)
 
     if mode == "input":
         input_row = np.concatenate([left_input.flatten(),

@@ -1,5 +1,5 @@
 send_udp: false
-run_to_collect_data_for_fusing_and_detection: true
+run_to_collect_data_for_fusing_and_detection: false
 
 detection_phase:
   hand_to_fuse: left
@@ -90,9 +90,9 @@ detection_phase:
     pose_estimation:
       is_enable: true
       left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_600_240828_left_camera_weight.pth
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_left_camera_weight.pth
       right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_480_240828_right_camera_weight.pth
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_right_camera_weight.pth
       #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
       #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
       #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
@@ -130,6 +130,7 @@ fusing_phase:
   fusing_methods:
     - transformer_encoder
     - minimize_distance
+    - ann
   enable: true
   fusing_selection_id: 1
   transformer_encoder: 
@@ -144,6 +145,14 @@ fusing_phase:
   minimize_distance:
     algo_name: L-BFGS-B
     tolerance: 1e-5
+  ann:
+    input_dim: 322
+    output_dim: 144
+    hidden_dim: 256
+    num_hidden_layers: 1
+    dropout_rate: 0.2
+    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240829/20240829-1753/ann_best.path
+
 
 camera:
   frame_calibrated_size:
@@ -165,8 +174,8 @@ utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
   save_angles: false
-  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: false
+  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: true
 
 debugging_mode:
   draw_xyz: false
@@ -186,7 +195,8 @@ debugging_mode:
     - 1
 
 socket:
-  server_ip: "127.0.0.1"
+  #server_ip: "127.0.0.1"
+  server_ip: "192.168.0.126"
   server_port: 12345
 
 angle_limitation:

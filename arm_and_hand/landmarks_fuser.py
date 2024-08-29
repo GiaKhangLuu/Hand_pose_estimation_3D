@@ -3,6 +3,7 @@ import numpy as np
 from functools import partial
 
 from transformer_encoder import TransformerEncoder
+from ann import ANN
 from utilities import (fuse_landmarks_from_two_cameras,
     convert_to_shoulder_coord,
     flatten_two_camera_input)
@@ -43,16 +44,41 @@ class LandmarksFuser:
                 num_encoder_layers, 
                 dim_feedforward, 
                 dropout)
+
             self._fusing_model.load_state_dict(torch.load(model_path))
             self._fusing_model.to("cuda")
             self._fusing_model.eval()
-        else:
+        elif self._method_name == "minimize_distance":
             # ------------ INIT SCIPY OPTIMIZATION ------------
             self._min_distance_tol = float(config_by_method["tolerance"])
             self._min_distance_algo_name = config_by_method["algo_name"]
             self._fusing_model = partial(fuse_landmarks_from_two_cameras,
                 tolerance = self._min_distance_tol,
                 method_name = self._min_distance_algo_name)
+        elif self._method_name == "ann":
+            # ------------ INIT ANN -----------
+            input_dim = config_by_method["input_dim"]
+            output_dim = config_by_method["output_dim"]
+            hidden_dim = config_by_method["hidden_dim"]
+            num_hidden_layers = config_by_method["num_hidden_layers"]
+            dropout_rate = config_by_method["dropout_rate"]
+            model_weight_path = config_by_method["model_weight_path"]
+            self._img_size = img_size
+            self._fusing_model = ANN(input_dim=input_dim,
+                output_dim=output_dim,
+                hidden_dim=hidden_dim,
+                num_hidden_layers=num_hidden_layers,
+                dropout_rate=dropout_rate
+            )
+
+            assert model_weight_path is not None
+
+            self._fusing_model.load_state_dict(torch.load(model_weight_path))
+            self._fusing_model.to("cuda")
+            self._fusing_model.eval()
+        else:
+            assert 0 == 1  
+
 
     def fuse(self, left_camera_wholebody_xyZ, 
         right_camera_wholebody_xyZ,
@@ -88,7 +114,7 @@ class LandmarksFuser:
                 arm_hand_XYZ_wrt_shoulder = arm_hand_XYZ_wrt_shoulder.T
                 xyz_origin = xyz_origin.reshape(3, 3)
                 self._input_sequence = self._input_sequence[1:]
-        else:
+        elif self._method_name == "minimize_distance":
             # -------------------- FUSE BY OPTIMIZATION METHOD -------------------- 
             arm_hand_fused_XYZ = self._fusing_model(opposite_xyZ=left_camera_wholebody_xyZ,
                 right_side_xyZ=right_camera_wholebody_xyZ,
@@ -98,4 +124,26 @@ class LandmarksFuser:
             #arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
                 #arm_hand_fused_XYZ,
                 #self._arm_hand_fused_names)
+        elif self._method_name == "ann":
+            # -------------------- FUSE BY ANN-------------------- 
+            input_row = flatten_two_camera_input(left_camera_landmarks_xyZ=left_camera_wholebody_xyZ,
+                right_camera_landmarks_xyZ=right_camera_wholebody_xyZ,
+                left_camera_intr=left_camera_intr,
+                right_camera_intr=right_camera_intr,
+                right_2_left_matrix=right_2_left_matrix,
+                img_size=self._img_size,
+                mode="input")
+            input_row = np.array(input_row)  # shape: (144)
+            input_row = input_row[None, :]  # shape: (1, 144)
+            input_row = torch.tensor(input_row, dtype=torch.float32)
+            with torch.no_grad():
+                input_row = input_row.to("cuda")
+                output_row = self._fusing_model(input_row)
+                output_row = output_row.detach().to("cpu").numpy()[0]  # shape: (144)
+                output_row = output_row.reshape(3, 48)  # shape: (3, 48)
+                output_row = output_row.T  # shape: (48, 3)
+
+                arm_hand_fused_XYZ = output_row[:26, :]
+        else:
+            assert 0 == 1
         return arm_hand_fused_XYZ

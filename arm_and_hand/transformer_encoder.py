@@ -7,7 +7,8 @@ class TransformerEncoder(nn.Module):
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=input_dim, 
             nhead=num_heads, 
             dim_feedforward=dim_feedforward, 
-            dropout=dropout)
+            dropout=dropout,
+            activation="gelu")
         self.encoder = nn.TransformerEncoder(self.encoder_layer, 
             num_layers=num_encoder_layers)
         self.fc = nn.Linear(input_dim, output_dim)

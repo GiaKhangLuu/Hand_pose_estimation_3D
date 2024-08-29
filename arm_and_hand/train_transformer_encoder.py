@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 import glob
+import numpy as np
 from transformer_encoder import TransformerEncoder
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from ann import ANN
-from dataloader_ann import HandArmLandmarksDataset_ANN
+from transformer_encoder import TransformerEncoder
+from dataloader_transformer_encoder import HandArmLandmarksDataset_Transformer_Encoder
 import math
 
 class EarlyStopping:
@@ -62,8 +63,10 @@ def train_model(model,
         model.train()
         running_loss = 0.0
         for inputs, targets in train_dataloader:
+            optimizer.zero_grad()
             inputs = inputs.to("cuda")
             targets = targets.to("cuda")
+            inputs = inputs.permute(1, 0, 2)  # shape: [seq_length, B, input_dim]
             outputs = model(inputs)  # shape: (B, 144), B = batch_size, 144 = output_dim
             outputs = outputs.reshape(-1, 3, 48)  # shape: (B, 3, 48)
             outputs = outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
@@ -71,7 +74,6 @@ def train_model(model,
             targets = targets[..., :26]
             loss = criterion(outputs, targets)
 
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
@@ -87,7 +89,8 @@ def train_model(model,
             for val_inputs, val_targets in val_dataloader:
                 val_inputs = val_inputs.to("cuda")
                 val_targets = val_targets.to("cuda")
-                val_outputs = model(val_inputs)
+                val_inputs = val_inputs.permute(1, 0, 2)  # shape: [seq_length, B, input_dim]
+                val_outputs = model(val_inputs)  # shape: (B, 144), B = batch_size, 144 = output_dim
                 val_outputs = val_outputs.reshape(-1, 3, 48)  # shape: (B, 3, 48)
                 val_outputs = val_outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
                 val_targets = val_targets.reshape(-1, 3, 48)
@@ -128,21 +131,21 @@ def train_model(model,
 if __name__ == "__main__":
     # ----------- INIT MODEL --------------------
     input_dim = 322
-    output_dim = 144
-    hidden_dim = 256
-    num_hidden_layers = 1
-    dropout_rate = 0.2
-
-    model = ANN(input_dim=input_dim,
+    output_dim = 48 * 3  # 144
+    num_encoder_heads = 7
+    num_encoder_layers = 6
+    dim_feedforward = 256
+    dropout = 0.2
+    model = TransformerEncoder(input_dim=input_dim,
         output_dim=output_dim,
-        hidden_dim=hidden_dim,
-        num_hidden_layers=num_hidden_layers,
-        dropout_rate=dropout_rate
-    )
+        num_heads=num_encoder_heads,
+        num_encoder_layers=num_encoder_layers,
+        dim_feedforward=dim_feedforward,
+        dropout=dropout)
     model = model.to("cuda")
 
     # -------------- TRAINING SETUP --------------
-    MODEL_NAME = "ann"
+    MODEL_NAME = "transformer_encoder"
     DATETIME = "{}".format(datetime.now().strftime("%Y%m%d-%H%M"))
     DATE = "{}".format(datetime.now().strftime("%Y%m%d"))
     BASE_DIR = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/{}".format(MODEL_NAME)
@@ -160,14 +163,17 @@ if __name__ == "__main__":
         [14, 15], [15, 16], [16, 17], 
         [18, 19], [19, 20], [20, 21], 
         [22, 23], [23, 24], [24, 25]]
-    train_body_distance_thres=500
-    train_leftarm_distance_thres=500
-    train_lefthand_distance_thres=200
-    val_body_distance_thres=450,
-    val_leftarm_distance_thres=450,
-    val_lefthand_distance_thres=150,
 
-    train_dataset = HandArmLandmarksDataset_ANN(train_paths, 
+    sequence_length = 5
+    train_body_distance_thres = 500
+    train_leftarm_distance_thres = 500
+    train_lefthand_distance_thres = 200
+    val_body_distance_thres = 450
+    val_leftarm_distance_thres = 450
+    val_lefthand_distance_thres = 150
+
+    train_dataset = HandArmLandmarksDataset_Transformer_Encoder(train_paths, 
+        sequence_length,
         body_lines, 
         lefthand_lines, 
         train_body_distance_thres, 
@@ -175,8 +181,9 @@ if __name__ == "__main__":
         train_lefthand_distance_thres,
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True)
-    train_dataloader = DataLoader(train_dataset, batch_size=256, shuffle=True)
-    val_dataset = HandArmLandmarksDataset_ANN(val_paths,
+    train_dataloader = DataLoader(train_dataset, batch_size=512, shuffle=True)
+    val_dataset = HandArmLandmarksDataset_Transformer_Encoder(val_paths,
+        sequence_length,
         body_lines,
         lefthand_lines,
         val_body_distance_thres,
@@ -192,7 +199,7 @@ if __name__ == "__main__":
         print("Loaded existing model weights: ", pretrained_weight_path)
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=5e-4)
     num_epochs = 50000
     current_time = datetime.now().strftime('%Y%m%d-%H%M')
     save_path = os.path.join(SAVE_DIR, "{}_best.path".format(MODEL_NAME))

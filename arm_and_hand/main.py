@@ -146,6 +146,7 @@ def send_udp_message(arm_angles, degrees=True):
     arm_angles.append(elapsed_time)
     message = str(arm_angles)
     client_socket.sendto(message.encode(), (server_ip, server_port))
+    print(message)
     return elapsed_time
 
 def _scale_intrinsic_by_res(intrinsic, original_size, processed_size):
