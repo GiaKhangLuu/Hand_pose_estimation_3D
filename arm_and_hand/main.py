@@ -109,7 +109,7 @@ if run_to_collect_data:
     send_udp = False
     save_landmarks = True
     save_images = True
-    detection_model_selection_id = 0
+    #detection_model_selection_id = 0
     fusing_enable = True
     fusing_method_selection_id = 1
     use_fusing_network = False
@@ -345,7 +345,8 @@ if __name__ == "__main__":
                     append_to_csv(ARM_ANGLE_CSV_PATH, angles_writed_to_file)
 
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
-                    output_landmarks = np.concatenate([arm_hand_XYZ_wrt_shoulder, np.zeros((48 - arm_hand_XYZ_wrt_shoulder.shape[0], 3))])
+                    output_landmarks = np.concatenate([arm_hand_fused_XYZ, 
+                        np.zeros((48 - arm_hand_fused_XYZ.shape[0], 3))])
                     input_row = flatten_two_camera_input(left_camera_body_landmarks_xyZ,
                         right_camera_body_landmarks_xyZ,
                         left_camera_intr,
@@ -354,8 +355,7 @@ if __name__ == "__main__":
                         frame_size,
                         mode="ground_truth",
                         timestamp=timestamp,
-                        output_landmarks=output_landmarks,
-                        output_xyz_origin=xyz_origin)
+                        output_landmarks=output_landmarks)
                     append_to_csv(LANDMARK_CSV_PATH, input_row)
             
                 if save_images and timestamp > 100:  # warm up for 100 frames before saving image 

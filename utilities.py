@@ -439,7 +439,6 @@ def flatten_two_camera_input(left_camera_landmarks_xyZ,
     img_size,
     timestamp=None,
     output_landmarks=None,
-    output_xyz_origin=None,
     mode="input"):
     assert mode in ["input", "ground_truth"]
     left_camera_norm_xyZ = left_camera_landmarks_xyZ.copy()
@@ -465,13 +464,11 @@ def flatten_two_camera_input(left_camera_landmarks_xyZ,
     else:
         assert timestamp is not None
         assert output_landmarks is not None
-        assert output_xyz_origin is not None
-        input_row = np.concatenate([[timestamp],
+        input_row = np.concatenate([[int(timestamp)],
             left_input.flatten(),
             left_camera_intr.flatten(),
             right_input.flatten(),
             right_camera_intr.flatten(),
             right_2_left_matrix.flatten(),
-            output_landmarks.T.flatten(),
-            output_xyz_origin.flatten()])
+            output_landmarks.T.flatten()])
     return input_row

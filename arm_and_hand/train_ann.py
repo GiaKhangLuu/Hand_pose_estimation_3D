@@ -102,7 +102,7 @@ def train_model(model,
             writer.add_scalar('Loss/Validation', val_loss, epoch)
             writer.add_scalar('Learning Rate', optimizer.param_groups[0]['lr'], epoch)
 
-        if epoch + 1 % log_seq == 0:
+        if (epoch + 1) % log_seq == 0:
             print(f'Epoch {epoch+1}/{num_epochs}, Training Loss: {epoch_loss:.4f}')
             print(f'Epoch {epoch+1}/{num_epochs}, Validation Loss: {val_loss:.4f}')
 
@@ -124,8 +124,9 @@ def train_model(model,
 if __name__ == "__main__":
     model_name = "ann"
     DATETIME = "{}".format(datetime.now().strftime("%Y%m%d-%H%M"))
+    DATE = "{}".format(datetime.now().strftime("%Y%m%d"))
     BASE_DIR = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/{}".format(model_name)
-    SAVE_DIR = os.path.join(BASE_DIR, DATETIME)
+    SAVE_DIR = os.path.join(BASE_DIR, DATE, DATETIME)
     DATA_DIR = "/home/giakhang/dev/pose_sandbox/data"  
     writer = SummaryWriter(log_dir=SAVE_DIR)
 
@@ -153,7 +154,7 @@ if __name__ == "__main__":
         train_lefthand_distance_thres,
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True)
-    train_dataloader = DataLoader(train_dataset, batch_size=256, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=128, shuffle=True)
     val_dataset = HandArmLandmarksDataset_ANN(val_paths,
         body_lines,
         lefthand_lines,
@@ -167,8 +168,8 @@ if __name__ == "__main__":
     input_dim = 322
     output_dim = 144
     hidden_dim = 256
-    num_hidden_layers = 10
-    dropout_rate = 0.3
+    num_hidden_layers = 9
+    dropout_rate = 0.2
 
     model = ANN(input_dim,
         output_dim,
@@ -188,8 +189,9 @@ if __name__ == "__main__":
     current_time = datetime.now().strftime('%Y%m%d-%H%M')
     save_path = os.path.join(SAVE_DIR, "{}_best.path".format(model_name))
     scheduler = ReduceLROnPlateau(optimizer, mode='min', 
-        factor=math.sqrt(0.1), patience=700, verbose=True, min_lr=1e-6)
-    early_stopping = EarlyStopping(patience=7000, verbose=True)
+        factor=math.sqrt(0.1), patience=1000, verbose=True, min_lr=1e-8)
+    #early_stopping = EarlyStopping(patience=7000, verbose=True)
+    early_stopping = None
 
     train_losses, val_losses = train_model(model, 
         train_dataloader, 
@@ -200,6 +202,7 @@ if __name__ == "__main__":
         save_path=save_path,
         early_stopping=early_stopping,
         scheduler=scheduler,
-        writer=writer)
+        writer=writer,
+        log_seq=50)
 
     writer.close()

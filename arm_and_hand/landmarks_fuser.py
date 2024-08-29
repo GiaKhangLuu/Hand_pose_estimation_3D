@@ -90,11 +90,11 @@ class LandmarksFuser:
                 self._input_sequence = self._input_sequence[1:]
         else:
             # -------------------- FUSE BY OPTIMIZATION METHOD -------------------- 
-            arm_hand_fused_XYZ = self._fusing_model(left_camera_wholebody_xyZ,
-                right_camera_wholebody_xyZ,
-                right_camera_intr,
-                left_camera_intr,
-                right_2_left_matrix)
+            arm_hand_fused_XYZ = self._fusing_model(opposite_xyZ=left_camera_wholebody_xyZ,
+                right_side_xyZ=right_camera_wholebody_xyZ,
+                right_side_cam_intrinsic=right_camera_intr,
+                opposite_cam_intrinsic=left_camera_intr,
+                right_to_opposite_correctmat=right_2_left_matrix)
             #arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
                 #arm_hand_fused_XYZ,
                 #self._arm_hand_fused_names)

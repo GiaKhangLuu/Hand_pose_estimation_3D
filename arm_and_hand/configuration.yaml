@@ -1,5 +1,5 @@
 send_udp: false
-run_to_collect_data_for_fusing_and_detection: false
+run_to_collect_data_for_fusing_and_detection: true
 
 detection_phase:
   hand_to_fuse: left
@@ -12,7 +12,7 @@ detection_phase:
   mediapipe:
     convert_color_channel: true
     hand_detection:
-      is_enable: false
+      is_enable: true
       min_detection_confidence: 0.3
       min_presence_confidence: 0.3
       min_tracking_confidence: 0.3
@@ -41,7 +41,7 @@ detection_phase:
         - PINKY_DIP
         - PINKY_TIP
     body_detection:
-      is_enable: false
+      is_enable: true
       min_detection_confidence: 0.5
       min_tracking_confidence: 0.5
       visibility_threshold: 0.2
@@ -89,14 +89,14 @@ detection_phase:
       person_detector_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_weight.pth
     pose_estimation:
       is_enable: true
+      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_600_240828_left_camera_weight.pth
+      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_480_240828_right_camera_weight.pth
       #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_weight.pth
+      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
       #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_weight.pth
-      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
-      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_right_camera_weight.pth
+      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_right_camera_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -143,7 +143,7 @@ fusing_phase:
     model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/best_model_2024-08-15-14:03.pth
   minimize_distance:
     algo_name: L-BFGS-B
-    tolerance: 1e-3
+    tolerance: 1e-5
 
 camera:
   frame_calibrated_size:
@@ -165,8 +165,8 @@ utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
   save_angles: false
-  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: true
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: false
 
 debugging_mode:
   draw_xyz: false
