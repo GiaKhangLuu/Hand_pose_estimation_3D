@@ -48,11 +48,17 @@ def visualize_arm(lmks_queue,
         lines=o3d.utility.Vector2iVector(lines)
     )
     line_set.colors = o3d.utility.Vector3dVector(colors)
+
+    bounding_box = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(np.array([[500,0 ,0], [0, 0, 0]])),
+        lines=o3d.utility.Vector2iVector([[0, 0]])
+    )
     
     vis = o3d.visualization.Visualizer()
     vis.create_window()
     vis.add_geometry(pcd)
     vis.add_geometry(line_set)
+    vis.add_geometry(bounding_box)
     
     # Main loop
     while True:
@@ -151,9 +157,28 @@ def visualize_arm(lmks_queue,
             line_set.lines = o3d.utility.Vector2iVector(lines)  # Update the lines
             line_set.colors = o3d.utility.Vector3dVector(colors)
 
+            # Draw cuboid
+            min_x, min_y, min_z = np.min(pts, axis=0)
+            max_x, max_y, max_z = np.max(pts, axis=0)
+            vertices = [
+                [min_x, min_y, min_z], [min_x, min_y, max_z], [min_x, max_y, min_z], [min_x, max_y, max_z],
+                [max_x, min_y, min_z], [max_x, min_y, max_z], [max_x, max_y, min_z], [max_x, max_y, max_z]
+            ]
+            vertices = np.array(vertices) 
+            edges = [
+                [0, 1], [1, 3], [3, 2], [2, 0],  
+                [4, 5], [5, 7], [7, 6], [6, 4],  
+                [0, 4], [1, 5], [2, 6], [3, 7]   
+            ]
+            bounding_box.points = o3d.utility.Vector3dVector(vertices)
+            bounding_box.lines = o3d.utility.Vector2iVector(edges)
+            bbox_colors = [[0, 1, 0] for _ in range(len(edges))]  
+            bounding_box.colors = o3d.utility.Vector3dVector(bbox_colors)
+
             # Update the visualization
             vis.update_geometry(pcd)
             vis.update_geometry(line_set)
+            vis.update_geometry(bounding_box)
         vis.poll_events()
         vis.update_renderer()        
 
