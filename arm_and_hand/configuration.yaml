@@ -1,5 +1,5 @@
 send_udp: false
-run_to_collect_data_for_fusing_and_detection: false
+run_to_collect_data_for_fusing_and_detection: true
 
 detection_phase:
   hand_to_fuse: left
@@ -89,14 +89,14 @@ detection_phase:
       person_detector_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_weight.pth
     pose_estimation:
       is_enable: true
-      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_left_camera_weight.pth
-      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_right_camera_weight.pth
-      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
-      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_right_camera_weight.pth
+      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_left_camera_weight.pth
+      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_right_camera_weight.pth
+      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
+      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_right_camera_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -174,12 +174,12 @@ utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
   save_angles: false
-  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: true
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: false
 
 debugging_mode:
-  draw_xyz: false
-  show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+  draw_xyz: true
+  show_left_arm_angle_j1: true       # Plotting left arm joint 1 and its reference vector to debug (visualize)
   show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
   show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
   show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)

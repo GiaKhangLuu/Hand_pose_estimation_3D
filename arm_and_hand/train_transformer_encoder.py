@@ -133,9 +133,9 @@ if __name__ == "__main__":
     input_dim = 322
     output_dim = 48 * 3  # 144
     num_encoder_heads = 7
-    num_encoder_layers = 6
-    dim_feedforward = 256
-    dropout = 0.2
+    num_encoder_layers = 1
+    dim_feedforward = 164
+    dropout = 0.1
     model = TransformerEncoder(input_dim=input_dim,
         output_dim=output_dim,
         num_heads=num_encoder_heads,
@@ -164,13 +164,24 @@ if __name__ == "__main__":
         [18, 19], [19, 20], [20, 21], 
         [22, 23], [23, 24], [24, 25]]
 
-    sequence_length = 5
-    train_body_distance_thres = 500
-    train_leftarm_distance_thres = 500
+    sequence_length = 2
+    train_body_distance_thres = 550
+    train_leftarm_distance_thres = 550
     train_lefthand_distance_thres = 200
-    val_body_distance_thres = 450
-    val_leftarm_distance_thres = 450
-    val_lefthand_distance_thres = 150
+    val_body_distance_thres=450,
+    val_leftarm_distance_thres=450,
+    val_lefthand_distance_thres=150,
+
+    #FAKE_DATA_PATH = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/fake_data.csv"
+    #if FAKE_DATA_PATH is not None:
+        #train_paths.append(FAKE_DATA_PATH)
+    fake_train_paths = glob.glob(os.path.join(DATA_DIR, "fake_data", "train", "fake_*.csv"))
+    fake_val_paths = glob.glob(os.path.join(DATA_DIR, "fake_data", "val", "fake_*.csv"))
+
+    if len(fake_train_paths) > 0:
+        train_paths.extend(fake_train_paths)
+    if len(fake_val_paths) > 0:
+        val_paths.extend(fake_val_paths)
 
     train_dataset = HandArmLandmarksDataset_Transformer_Encoder(train_paths, 
         sequence_length,
@@ -199,12 +210,12 @@ if __name__ == "__main__":
         print("Loaded existing model weights: ", pretrained_weight_path)
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=5e-4)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
     num_epochs = 50000
     current_time = datetime.now().strftime('%Y%m%d-%H%M')
     save_path = os.path.join(SAVE_DIR, "{}_best.path".format(MODEL_NAME))
     scheduler = ReduceLROnPlateau(optimizer, mode='min', 
-        factor=math.sqrt(0.1), patience=1000, verbose=True, min_lr=1e-8)
+        factor=math.sqrt(0.1), patience=500, verbose=True, min_lr=1e-8)
     #early_stopping = EarlyStopping(patience=7000, verbose=True)
     early_stopping = None
 

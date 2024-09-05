@@ -12,6 +12,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from ann import ANN
 from dataloader_ann import HandArmLandmarksDataset_ANN
 import math
+from sklearn.preprocessing import MinMaxScaler
+from csv_writer import columns_to_normalize, fusion_csv_columns_name
+import pandas as pd
+import joblib
 
 class EarlyStopping:
     def __init__(self, patience=5, verbose=False, delta=0):
@@ -77,7 +81,7 @@ def train_model(model,
 
             running_loss += loss.item() 
 
-        epoch_loss = running_loss / len(train_dataloader.dataset)
+        epoch_loss = running_loss / len(train_dataloader)
         train_losses.append(epoch_loss)
 
         # Validation phase
@@ -93,7 +97,7 @@ def train_model(model,
                 val_targets = val_targets.reshape(-1, 3, 48)
                 val_targets = val_targets[..., :26]
                 val_loss += criterion(val_outputs, val_targets).item() 
-        val_loss = val_loss / len(val_dataloader.dataset)
+        val_loss = val_loss / len(val_dataloader)
         val_losses.append(val_loss)
 
         if scheduler is not None:
@@ -130,8 +134,8 @@ if __name__ == "__main__":
     input_dim = 322
     output_dim = 144
     hidden_dim = 256
-    num_hidden_layers = 1
-    dropout_rate = 0.2
+    num_hidden_layers = 4
+    dropout_rate = 0.1
 
     model = ANN(input_dim=input_dim,
         output_dim=output_dim,
@@ -160,13 +164,15 @@ if __name__ == "__main__":
         [14, 15], [15, 16], [16, 17], 
         [18, 19], [19, 20], [20, 21], 
         [22, 23], [23, 24], [24, 25]]
-    train_body_distance_thres=500
-    train_leftarm_distance_thres=500
-    train_lefthand_distance_thres=200
+    train_body_distance_thres = 550
+    train_leftarm_distance_thres = 550
+    train_lefthand_distance_thres = 200
     val_body_distance_thres=450,
     val_leftarm_distance_thres=450,
     val_lefthand_distance_thres=150,
 
+    # Load the true dataset to get the scaler then pass the scaler to the true and fake dataset
+    minmax_scaler = MinMaxScaler()
     train_dataset = HandArmLandmarksDataset_ANN(train_paths, 
         body_lines, 
         lefthand_lines, 
@@ -175,6 +181,29 @@ if __name__ == "__main__":
         train_lefthand_distance_thres,
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True)
+    data_features = pd.DataFrame(train_dataset._inputs, columns=fusion_csv_columns_name[1:323])
+    minmax_scaler.fit_transform(data_features[columns_to_normalize].values)
+    scaler_save_path = os.path.join(SAVE_DIR, "input_scaler.pkl")
+    joblib.dump(minmax_scaler, scaler_save_path)
+
+    fake_train_paths = glob.glob(os.path.join(DATA_DIR, "fake_data", "train", "fake_*.csv"))
+    fake_val_paths = glob.glob(os.path.join(DATA_DIR, "fake_data", "val", "fake_*.csv"))
+
+    if len(fake_train_paths) > 0:
+        train_paths.extend(fake_train_paths)
+    if len(fake_val_paths) > 0:
+        val_paths.extend(fake_val_paths)
+
+    train_dataset = HandArmLandmarksDataset_ANN(train_paths, 
+        body_lines, 
+        lefthand_lines, 
+        train_body_distance_thres, 
+        train_leftarm_distance_thres, 
+        train_lefthand_distance_thres,
+        filter_outlier=True,
+        only_keep_frames_contain_lefthand=True,
+        scaler=minmax_scaler,
+        columns_to_scale=columns_to_normalize)
     train_dataloader = DataLoader(train_dataset, batch_size=256, shuffle=True)
     val_dataset = HandArmLandmarksDataset_ANN(val_paths,
         body_lines,
@@ -183,7 +212,9 @@ if __name__ == "__main__":
         val_leftarm_distance_thres,
         val_lefthand_distance_thres,
         filter_outlier=True,
-        only_keep_frames_contain_lefthand=True)
+        only_keep_frames_contain_lefthand=True,
+        scaler=minmax_scaler,
+        columns_to_scale=columns_to_normalize)
     val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=False)  
 
     pretrained_weight_path = None
@@ -195,7 +226,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     num_epochs = 50000
     current_time = datetime.now().strftime('%Y%m%d-%H%M')
-    save_path = os.path.join(SAVE_DIR, "{}_best.path".format(MODEL_NAME))
+    save_path = os.path.join(SAVE_DIR, "{}_best.pth".format(MODEL_NAME))
     scheduler = ReduceLROnPlateau(optimizer, mode='min', 
         factor=math.sqrt(0.1), patience=1000, verbose=True, min_lr=1e-8)
     #early_stopping = EarlyStopping(patience=7000, verbose=True)
