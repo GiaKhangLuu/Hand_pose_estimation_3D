@@ -125,7 +125,9 @@ def calculate_wrist_coordinate_wrt_elbow(elbow_coordinate_wrt_origin, wrist_coor
 
 def calculate_angle_j1(shoulder_coords_in_world_rot_mat):
     # Joint 1 rotates around z-axis
-    _, _, angle_j1 = shoulder_coords_in_world_rot_mat.as_euler("xyz", degrees=True)
+    a, b, angle_j1 = shoulder_coords_in_world_rot_mat.as_euler("xyz", degrees=True)
+    print("{}-------{}-------{}".format(round(a, 2), round(b, 2), round(angle_j1, 2)))
+    print("-----------")
     return angle_j1
 
 def calculate_angle_j2(shoulder_coords_in_world_rot_mat):

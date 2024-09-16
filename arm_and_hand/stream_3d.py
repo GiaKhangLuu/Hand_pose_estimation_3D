@@ -22,6 +22,8 @@ from angle_calculation import (calculate_angle_j1,
     calculate_wrist_coordinate_wrt_origin,
     calculate_wrist_coordinate_wrt_elbow)
 
+from angle_calculation_v2 import calculate_angle_j1 as cal_angle_j1_v2
+
 def visualize_arm(lmks_queue,
     landmark_dictionary, 
     show_left_arm_j1=False,
@@ -95,22 +97,30 @@ def visualize_arm(lmks_queue,
                 landmark_dictionary, elbow_coordinate_wrt_origin)  # (3, O), O = number of vectors (xyz)
 
             if show_left_arm_j1 or show_left_arm_j2:
-                x_shoulder, y_shoulder, z_shoulder = shoulder_coords_in_world[:, 0],  shoulder_coords_in_world[:, 1], shoulder_coords_in_world[:, 2]
-                shoulder_coords_in_world_rot_mat = R.from_matrix(shoulder_coords_in_world)
+                #x_shoulder, y_shoulder, z_shoulder = shoulder_coords_in_world[:, 0],  shoulder_coords_in_world[:, 1], shoulder_coords_in_world[:, 2]
+                #shoulder_coords_in_world_rot_mat = R.from_matrix(shoulder_coords_in_world)
 
+                #pts = np.concatenate([pts, [x_shoulder * 40, y_shoulder * 40, z_shoulder * 40]], axis=0)
+                #last_index = pts.shape[0] - 1
+                #lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
+                #colors.extend([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
+
+                #if show_left_arm_j1:
+                    #angle_j1 = calculate_angle_j1(shoulder_coords_in_world_rot_mat)
+                    ##print("----------")
+                    ##print("Angle j1: ", angle_j1)
+                #if show_left_arm_j2:
+                    #angle_j2 = calculate_angle_j2(shoulder_coords_in_world_rot_mat)
+                    ##print("----------")
+                    ##print("Angle j2: ", angle_j2)
+
+                angle_j1, shoulder_coords_in_world = cal_angle_j1_v2(pts, 
+                    landmark_dictionary)
+                x_shoulder, y_shoulder, z_shoulder = shoulder_coords_in_world[:, 0],  shoulder_coords_in_world[:, 1], shoulder_coords_in_world[:, 2]
                 pts = np.concatenate([pts, [x_shoulder * 40, y_shoulder * 40, z_shoulder * 40]], axis=0)
                 last_index = pts.shape[0] - 1
                 lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
-                colors.extend([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
-
-                if show_left_arm_j1:
-                    angle_j1 = calculate_angle_j1(shoulder_coords_in_world_rot_mat)
-                    #print("----------")
-                    #print("Angle j1: ", angle_j1)
-                if show_left_arm_j2:
-                    angle_j2 = calculate_angle_j2(shoulder_coords_in_world_rot_mat)
-                    #print("----------")
-                    #print("Angle j2: ", angle_j2)
+                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
             if show_left_arm_j3 or show_left_arm_j4:
                 x_elbow, y_elbow, z_elbow = elbow_coordinate_wrt_origin[:, 0], elbow_coordinate_wrt_origin[:, 1], elbow_coordinate_wrt_origin[:, 2]

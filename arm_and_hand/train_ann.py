@@ -222,7 +222,7 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load(pretrained_weight_path))
         print("Loaded existing model weights: ", pretrained_weight_path)
 
-    criterion = nn.MSELoss()
+    criterion = nn.SmoothL1Loss(reduction="mean")
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     num_epochs = 50000
     current_time = datetime.now().strftime('%Y%m%d-%H%M')

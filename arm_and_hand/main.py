@@ -24,6 +24,7 @@ from datetime import datetime
 
 from stream_3d import visualize_arm, visualize_hand
 from angle_calculation import get_angles_between_joints
+from angle_calculation_v2 import calculate_angle_j1, calculate_angle_j2
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from csv_writer import (create_csv, 
     append_to_csv, 
@@ -37,6 +38,7 @@ from kalman_filter import predict_and_correct
 from common import (load_data_from_npz_file,
     get_oak_2_rs_matrix,
     load_config)
+from send_data_to_robot import send_udp_message
 from landmarks_detectors import LandmarksDetectors
 from landmarks_fuser import LandmarksFuser
 
@@ -97,7 +99,6 @@ angles_max = [joint1_max, joint2_max, joint3_max, joint4_max, joint5_max, joint6
 
 use_fusing_network = fusing_method_list[fusing_method_selection_id] != "minimize_distance" 
 
-start_time_sending_udp = None
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_ip = config["socket"]["server_ip"]
 server_port = config["socket"]["server_port"]
@@ -128,27 +129,6 @@ left_cam_data = load_data_from_npz_file(left_cam_calib_path)
 right_oak_r_raw, right_oak_t_raw, right_camera_intr = right_cam_data['rvecs'], right_cam_data['tvecs'], right_cam_data['camMatrix']
 left_oak_r_raw, left_oak_t_raw, left_camera_intr = left_cam_data['rvecs'], left_cam_data['tvecs'], left_cam_data['camMatrix']
 
-def degree_to_radian(degrees):
-    radians = degrees * math.pi / 180 
-    return radians
-
-def send_udp_message(arm_angles, degrees=True):
-    global start_time_sending_udp
-    if start_time_sending_udp is None:
-        start_time_sending_udp = time.time()
-        return None
-    if degrees:
-        arm_angles = degree_to_radian(arm_angles)
-    end_time_sending_udp = time.time()
-    elapsed_time = end_time_sending_udp - start_time_sending_udp
-    start_time_sending_udp = end_time_sending_udp
-    arm_angles = arm_angles.tolist()
-    arm_angles.append(elapsed_time)
-    message = str(arm_angles)
-    client_socket.sendto(message.encode(), (server_ip, server_port))
-    print(message)
-    return elapsed_time
-
 def _scale_intrinsic_by_res(intrinsic, original_size, processed_size):
     """
     Default camera's resolution is different with processing resolution. Therefore,
@@ -175,17 +155,12 @@ right_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (
 
 arm_points_vis_queue = queue.Queue()  # This queue stores fused arm landmarks to visualize by open3d
 hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks to visualize by open3d 
+TARGET_ANGLES_QUEUE = queue.Queue()  # This queue stores target angles 
 
 landmarks_detectors = LandmarksDetectors(detection_model_selection_id, 
     detection_model_list, config["detection_phase"], draw_landmarks)
 landmarks_fuser = LandmarksFuser(fusing_method_selection_id,
     fusing_method_list, config["fusing_phase"], frame_size)
-
-arm_angles_predictions, arm_sigmas_predictions = [], []
-num_joints = 6
-for i in range(num_joints):
-    arm_angles_predictions.append(np.array([[0]]))
-    arm_sigmas_predictions.append(np.array([[1]]))
 
 if __name__ == "__main__":
     if (save_landmarks or
@@ -209,7 +184,7 @@ if __name__ == "__main__":
 
         if save_angles:
             ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "arm_angle_{}.csv".format(current_time))
-            create_csv(ARM_ANGLE_CSV_PATH, arm_angles_name)
+            create_csv(ARM_ANGLE_CSV_PATH, ["frame", "angle_j1"])
 
     pipeline_left_oak = initialize_oak_cam()
     pipeline_right_oak = initialize_oak_cam()
@@ -221,6 +196,12 @@ if __name__ == "__main__":
 
     left_oak_thread.start()
     right_oak_thread.start()
+
+    if send_udp:
+        send_data_thread = threading.Thread(target=send_udp_message, args=(TARGET_ANGLES_QUEUE,
+            True, 0.5,), daemon=True)
+        send_data_thread.start()
+
     if plot_3d:
         vis_arm_thread = threading.Thread(target=visualize_arm,
             args=(arm_points_vis_queue, 
@@ -245,23 +226,6 @@ if __name__ == "__main__":
     start_time = time.time()
     fps = 0
 
-    #kalman_filters = []
-    #for i in range(len(arm_hand_fused_names)):
-        #f = KalmanFilter(dim_x=3, dim_z=3)
-        #initial_state = np.zeros(3)
-        #state_transition_mat = np.eye(3)
-        #measurement_func = np.eye(3)
-        #measurement_noise = np.eye(3) * 0.001
-        #process_noise = [0.001] * 3
-        #f.x = initial_state
-        #f.F = state_transition_mat
-        #f.H = measurement_func
-        #f.P *= 1
-        #f.R = measurement_noise
-        #f.Q = process_noise
-        #kalman_filters.append(f)
-
-    input_frames = []
     while True:
         left_camera_body_landmarks_xyZ, right_camera_body_landmarks_xyZ = None, None
         # Get and preprocess rgb and its depth
@@ -306,43 +270,29 @@ if __name__ == "__main__":
             if (arm_hand_XYZ_wrt_shoulder is not None and
                 xyz_origin is not None):
 
-                arm_angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, 
-                    arm_hand_fused_names, xyz_origin)
-
-                angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = arm_angles
-                arm_angles = np.array([angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6])
-
-                if limit_angles:
-                    arm_angles = np.clip(arm_angles, angles_min, angles_max) 
-
-                filter_angles = []
-                for i in range(len(arm_angles_predictions)):
-                    measured_angle_joint_i = arm_angles[i]
-                    previous_angle_joint_i = arm_angles_predictions[i]
-                    previous_sigma_joint_i = arm_sigmas_predictions[i]
-                    angle_prediction, sigma_prediction = predict_and_correct(measured_angle_joint_i, 
-                        previous_angle_joint_i, 
-                        previous_sigma_joint_i)
-                    arm_angles_predictions[i] = angle_prediction
-                    arm_sigmas_predictions[i] = sigma_prediction 
-                    filter_angles.append(angle_prediction.squeeze())
-
-                filter_angles = np.array(filter_angles)
-
-                elapsed_sending_data_time = None
+                #arm_angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, 
+                    #arm_hand_fused_names, xyz_origin)
+                angle_j1, j1_rot_mat_wrt_world = calculate_angle_j1(arm_hand_XYZ_wrt_shoulder,
+                    arm_hand_fused_names)
+                angle_j2, j2_rot_mat_wrt_world, j2_rot_mat_wrt_j1 = calculate_angle_j2(arm_hand_XYZ_wrt_shoulder,
+                    arm_hand_fused_names, j1_rot_mat_wrt_world, angle_j1)
+                arm_angles = np.array([angle_j1, angle_j2, 0, 0, 0, 0])
                 if send_udp:
-                    elapsed_sending_data_time = send_udp_message(filter_angles, degrees=True)
+                    TARGET_ANGLES_QUEUE.put((arm_angles, timestamp))
+                    if TARGET_ANGLES_QUEUE.qsize() > 1:
+                        TARGET_ANGLES_QUEUE.get()
 
                 if plot_3d: 
                     arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))
                     if arm_points_vis_queue.qsize() > 1:
                         arm_points_vis_queue.get()
 
-                if save_angles and elapsed_sending_data_time:
-                    angles_writed_to_file = [timestamp] 
-                    angles_writed_to_file.extend(arm_angles.tolist())
-                    angles_writed_to_file.extend(filter_angles.tolist())
-                    angles_writed_to_file.append(elapsed_sending_data_time)
+                if save_angles:
+                    #angles_writed_to_file = [timestamp] 
+                    #angles_writed_to_file.extend(arm_angles.tolist())
+                    #angles_writed_to_file.extend(filter_angles.tolist())
+                    #angles_writed_to_file.append(elapsed_sending_data_time)
+                    angles_writed_to_file = [timestamp, angle_j1, angle_j2]
                     append_to_csv(ARM_ANGLE_CSV_PATH, angles_writed_to_file)
 
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
@@ -366,18 +316,9 @@ if __name__ == "__main__":
                     cv2.imwrite(right_img_path, right_image_to_save)
                     num_img_save += 1
 
-                #for i in range(len(arm_hand_fused_names)):
-                    #kalman_filter = kalman_filters[i]
-                    #landmarks = arm_hand_XYZ_wrt_shoulder[i]
-                    #kalman_filter.predict()
-                    #kalman_filter.update(landmarks.flatten())
-                    #smooth_landmark = kalman_filter.x
-                    #arm_hand_XYZ_wrt_shoulder[i, :] = smooth_landmark.reshape(1, 3) 
-
         frame_count += 1
         elapsed_time = time.time() - start_time
 
-        # Update FPS every second
         if elapsed_time >= 1.0:
             fps = frame_count / elapsed_time
             frame_count = 0
