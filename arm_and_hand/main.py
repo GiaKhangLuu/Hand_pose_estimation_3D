@@ -24,7 +24,7 @@ from datetime import datetime
 
 from stream_3d import visualize_arm, visualize_hand
 from angle_calculation import get_angles_between_joints
-from angle_calculation_v2 import calculate_angle_j1, calculate_angle_j2
+from angle_calculation_v2 import calculate_six_arm_angles
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from csv_writer import (create_csv, 
     append_to_csv, 
@@ -270,13 +270,20 @@ if __name__ == "__main__":
             if (arm_hand_XYZ_wrt_shoulder is not None and
                 xyz_origin is not None):
 
+                angles, rot_mats_wrt_origin, rot_mats_wrt_parent = calculate_six_arm_angles(arm_hand_XYZ_wrt_shoulder,
+                    xyz_origin,
+                    arm_hand_fused_names)
+                angle_j1, angle_j2, angle_j3, angle_j4, _, _ = angles
+                j1_rm, j2_rm, j3_rm, j4_rm, _, _ = rot_mats_wrt_origin
+                j1_rm_wrt_parent, j2_rm_wrt_parent, j3_rm_wrt_parent, j4_rm_wrt_parent, _, _ = rot_mats_wrt_parent
+
                 #arm_angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, 
                     #arm_hand_fused_names, xyz_origin)
-                angle_j1, j1_rot_mat_wrt_world = calculate_angle_j1(arm_hand_XYZ_wrt_shoulder,
-                    arm_hand_fused_names)
-                angle_j2, j2_rot_mat_wrt_world, j2_rot_mat_wrt_j1 = calculate_angle_j2(arm_hand_XYZ_wrt_shoulder,
-                    arm_hand_fused_names, j1_rot_mat_wrt_world, angle_j1)
-                arm_angles = np.array([angle_j1, angle_j2, 0, 0, 0, 0])
+                #angle_j1, j1_rot_mat_wrt_world = calculate_angle_j1(arm_hand_XYZ_wrt_shoulder,
+                    #arm_hand_fused_names)
+                #angle_j2, j2_rot_mat_wrt_world, j2_rot_mat_wrt_j1 = calculate_angle_j2(arm_hand_XYZ_wrt_shoulder,
+                    #arm_hand_fused_names, j1_rot_mat_wrt_world, angle_j1)
+                arm_angles = np.array([angle_j1, angle_j2, angle_j3, angle_j4, 0, 0])
                 if send_udp:
                     TARGET_ANGLES_QUEUE.put((arm_angles, timestamp))
                     if TARGET_ANGLES_QUEUE.qsize() > 1:

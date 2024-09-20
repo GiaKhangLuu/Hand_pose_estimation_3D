@@ -13,7 +13,7 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_ip = "127.0.0.1"
 server_port = 12345
 
-fps = 60
+fps = 30
 delta_t = 1 / fps
 
 current_angles = np.array([0, 0, 0, 0, 0, 0])
@@ -50,7 +50,7 @@ def send_udp_message(target_angles_queue=None, degree=True, lerp_factor=0.5):
     global target_angles
     global global_timestamp
 
-    create_csv("/home/giakhang/Desktop/debug_lerp.csv", ["frame", "current_angle_j1", "target_angle_j1"])
+    #create_csv("/home/giakhang/Desktop/debug_lerp.csv", ["frame", "current_angle_j1", "target_angle_j1"])
 
     while True:
         if target_angles_queue.empty():
@@ -72,7 +72,7 @@ def send_udp_message(target_angles_queue=None, degree=True, lerp_factor=0.5):
         udp_mess = str(next_rad_angles)
         client_socket.sendto(udp_mess.encode(), (server_ip, server_port))
 
-        append_to_csv("/home/giakhang/Desktop/debug_lerp.csv",
-            [global_timestamp, current_angles[0], target_angles[0]])
+        #append_to_csv("/home/giakhang/Desktop/debug_lerp.csv",
+            #[global_timestamp, current_angles[0], target_angles[0]])
             
         time.sleep(delta_t) 
