@@ -56,7 +56,6 @@ frame_size = (config["process_frame"]["frame_size"]["width"],
 frame_calibrated_size = (config["camera"]["frame_calibrated_size"]["height"],
     config["camera"]["frame_calibrated_size"]["width"])
 
-limit_angles = config["angle_limitation"]["enable"]
 send_udp = config["send_udp"]
 plot_3d = config["utilities"]["plot_3d"]
 draw_landmarks = config["utilities"]["draw_landmarks"]
@@ -82,26 +81,7 @@ debug_angle_j6 = config["debugging_mode"]["show_left_arm_angle_j6"]
 ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
-joint1_min = config["angle_limitation"]["angle_joint1"]["min"]
-joint1_max = config["angle_limitation"]["angle_joint1"]["max"]
-joint2_min = config["angle_limitation"]["angle_joint2"]["min"]
-joint2_max = config["angle_limitation"]["angle_joint2"]["max"]
-joint3_min = config["angle_limitation"]["angle_joint3"]["min"]
-joint3_max = config["angle_limitation"]["angle_joint3"]["max"]
-joint4_min = config["angle_limitation"]["angle_joint4"]["min"]
-joint4_max = config["angle_limitation"]["angle_joint4"]["max"]
-joint5_min = config["angle_limitation"]["angle_joint5"]["min"]
-joint5_max = config["angle_limitation"]["angle_joint5"]["max"]
-joint6_min = config["angle_limitation"]["angle_joint6"]["min"]
-joint6_max = config["angle_limitation"]["angle_joint6"]["max"]
-angles_min = [joint1_min, joint2_min, joint3_min, joint4_min, joint5_min, joint6_min]
-angles_max = [joint1_max, joint2_max, joint3_max, joint4_max, joint5_max, joint6_max]
-
 use_fusing_network = fusing_method_list[fusing_method_selection_id] != "minimize_distance" 
-
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_ip = config["socket"]["server_ip"]
-server_port = config["socket"]["server_port"]
 
 run_to_collect_data = config["run_to_collect_data_for_fusing_and_detection"]
 
@@ -183,8 +163,9 @@ if __name__ == "__main__":
             os.mkdir(IMAGE_DIR)
 
         if save_angles:
+            current_frame_time = time.time()
             ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "arm_angle_{}.csv".format(current_time))
-            create_csv(ARM_ANGLE_CSV_PATH, ["frame", "angle_j1"])
+            create_csv(ARM_ANGLE_CSV_PATH, arm_angles_name)
 
     pipeline_left_oak = initialize_oak_cam()
     pipeline_right_oak = initialize_oak_cam()
@@ -273,9 +254,7 @@ if __name__ == "__main__":
                 angles, rot_mats_wrt_origin, rot_mats_wrt_parent = calculate_six_arm_angles(arm_hand_XYZ_wrt_shoulder,
                     xyz_origin,
                     arm_hand_fused_names)
-                angle_j1, angle_j2, angle_j3, angle_j4, _, _ = angles
-                j1_rm, j2_rm, j3_rm, j4_rm, _, _ = rot_mats_wrt_origin
-                j1_rm_wrt_parent, j2_rm_wrt_parent, j3_rm_wrt_parent, j4_rm_wrt_parent, _, _ = rot_mats_wrt_parent
+                angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
 
                 #arm_angles = get_angles_between_joints(arm_hand_XYZ_wrt_shoulder, 
                     #arm_hand_fused_names, xyz_origin)
@@ -283,7 +262,7 @@ if __name__ == "__main__":
                     #arm_hand_fused_names)
                 #angle_j2, j2_rot_mat_wrt_world, j2_rot_mat_wrt_j1 = calculate_angle_j2(arm_hand_XYZ_wrt_shoulder,
                     #arm_hand_fused_names, j1_rot_mat_wrt_world, angle_j1)
-                arm_angles = np.array([angle_j1, angle_j2, angle_j3, angle_j4, 0, 0])
+                arm_angles = np.array([angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6])
                 if send_udp:
                     TARGET_ANGLES_QUEUE.put((arm_angles, timestamp))
                     if TARGET_ANGLES_QUEUE.qsize() > 1:
@@ -295,11 +274,12 @@ if __name__ == "__main__":
                         arm_points_vis_queue.get()
 
                 if save_angles:
-                    #angles_writed_to_file = [timestamp] 
-                    #angles_writed_to_file.extend(arm_angles.tolist())
-                    #angles_writed_to_file.extend(filter_angles.tolist())
-                    #angles_writed_to_file.append(elapsed_sending_data_time)
-                    angles_writed_to_file = [timestamp, angle_j1, angle_j2]
+                    next_frame_time = time.time()
+                    delta_t = round(next_frame_time - current_frame_time, 3)
+                    delta_t_ms = delta_t * 1000
+                    current_frame_time = next_frame_time
+                    delta_fps = round(1000 / delta_t_ms, 1)
+                    angles_writed_to_file = [timestamp, delta_fps, angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6]
                     append_to_csv(ARM_ANGLE_CSV_PATH, angles_writed_to_file)
 
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks

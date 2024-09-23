@@ -89,14 +89,14 @@ detection_phase:
       person_detector_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_weight.pth
     pose_estimation:
       is_enable: true
-      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_left_camera_weight.pth
-      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/epoch_20_240829_right_camera_weight.pth
-      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
-      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_right_camera_weight.pth
+      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/best_20240923_left_camera_weight.pth
+      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/best_20240923_right_camera_weight.pth
+      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
+      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_right_camera_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -172,7 +172,7 @@ process_frame:
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_angles: false
+  save_angles: true
   save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
   save_images: false
 
@@ -180,8 +180,8 @@ debugging_mode:
   draw_xyz: false
   show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
   show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
-  show_left_arm_angle_j3: true       # Plotting left arm joint 3 and its reference vector to debug (visualize)
-  show_left_arm_angle_j4: true       # Plotting left arm joint 4 and its reference vector to debug (visualize)
+  show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
+  show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
   show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
   show_left_arm_angle_j6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
   ref_vector_color: 
@@ -192,29 +192,3 @@ debugging_mode:
     - 0
     - 0
     - 1
-
-socket:
-  #server_ip: "127.0.0.1"
-  server_ip: "192.168.0.126"
-  server_port: 12345
-
-angle_limitation:
-  enable: true
-  angle_joint1: 
-    min: -195
-    max: 86
-  angle_joint2: 
-    min: -3
-    max: 92
-  angle_joint3: 
-    min: -143
-    max: 143
-  angle_joint4: 
-    min: -91
-    max: 22
-  angle_joint5: 
-    min: -115
-    max: 206
-  angle_joint6: 
-    min: -69
-    max: 52

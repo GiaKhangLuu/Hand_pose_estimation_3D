@@ -5,15 +5,13 @@ import numpy as np
 import traceback
 from scipy.spatial.transform import Rotation as R
 
-#elbow_vector_in_prev_frame = None
-#wrist_vector_in_prev_frame = None
-#middle_finger_vector_in_prev_frame = None
 shoulder_vector_in_prev_frame = None
 elbow_vector_in_prev_frame = None
 wrist_vector_in_prev_frame = None
 
 rotation_matrix_for_shoulder = np.eye(3)
 rotation_matrix_for_elbow = R.from_euler("xz", [90, -90], degrees=True).as_matrix()
+rotation_matrix_for_wrist = R.from_euler("y", -90, degrees=True).as_matrix()
 
 length_threshold = 0.03
 axis_names = ['x', 'y', 'z']
@@ -21,120 +19,20 @@ axis_names = ['x', 'y', 'z']
 joint1_max = 86
 joint1_min = -195
 
-def set_joint1_rot_mat(x_unit_joint1):
-    """
-    TODO: doc.
-    """
-    y_unit_joint1 = np.array([-x_unit_joint1[1], x_unit_joint1[0], x_unit_joint1[2]])
-    z_unit_joint1 = np.cross(x_unit_joint1, y_unit_joint1)
+joint2_max = 92
+joint2_min = -3
 
-    assert np.abs(1 - np.linalg.norm(y_unit_joint1)) < 1e-3
-    assert np.abs(1 - np.linalg.norm(z_unit_joint1)) < 1e-3
+joint3_max = 143
+joint3_min = -143
 
-    rotation_matrix = np.hstack([x_unit_joint1[:, None], 
-        y_unit_joint1[:, None], 
-        z_unit_joint1[:, None]])
+joint4_max = 22
+joint4_min = -91
 
-    return rotation_matrix
+joint5_max = 206
+joint5_min = -115
 
-def calculate_joint1_angle(joint1_rot_mat):
-    """
-    TODO: doc.
-    """
-    joint1_angle = np.arctan2(joint1_rot_mat[0, 1], joint1_rot_mat[0, 0])
-    joint1_angle = np.degrees(joint1_angle)
-
-    assert -180 <= joint1_angle <= 180
-
-    return joint1_angle
-
-def map_to_rviz(joint1_angle):
-    """
-    TODO: doc.
-    """
-    if -90 <= joint1_angle <= 180:
-        joint1_angle = round(-joint1_angle)
-    else:
-        joint1_angle = round(-joint1_angle - 360)
-    return joint1_angle
-
-def calculate_angle_j1(XYZ_landmarks, landmark_dictionary):
-    """
-    TODO: doc.
-    """
-    global shoulder_vector_in_prev_frame
-    global joint1_max
-    global joint1_min
-    global length_threshold
-
-    x_joint1 = XYZ_landmarks[landmark_dictionary.index("left elbow")].copy()
-    x_joint1 *= (-1)
-    x_joint1[-1] = 0
-    x_joint1_length = np.linalg.norm(x_joint1)
-    if x_joint1_length < length_threshold:
-        x_joint1 = shoulder_vector_in_prev_frame.copy()
-        x_joint1 *= (-1)
-        x_joint1[-1] = 0
-    else:
-        shoulder_vector_in_prev_frame = XYZ_landmarks[landmark_dictionary.index("left elbow")].copy()
-
-    x_unit_joint1 = x_joint1 / np.linalg.norm(x_joint1)
-    joint1_rot_mat = set_joint1_rot_mat(x_unit_joint1)
-    joint1_angle = calculate_joint1_angle(joint1_rot_mat)
-    joint1_angle = map_to_rviz(joint1_angle)
-
-    if joint1_angle > joint1_max or joint1_angle < joint1_min: 
-        x_unit_joint1[1] = -x_unit_joint1[1]
-        joint1_rot_mat = set_joint1_rot_mat(x_unit_joint1)
-        joint1_angle = calculate_joint1_angle(joint1_rot_mat)
-        joint1_angle = map_to_rviz(joint1_angle)
-
-    return joint1_angle, joint1_rot_mat 
-
-def calculate_angle_j2(XYZ_landmarks, landmark_dictionary, joint1_rot_mat): 
-    """
-    TODO: doc.
-    """
-    global shoulder_vector_in_prev_frame
-    global length_threshold
-
-    joint1_rot_mat_inv = joint1_rot_mat.T
-    x_joint2 = XYZ_landmarks[landmark_dictionary.index("left elbow")].copy()
-    x_joint2 *= (-1)
-    x_joint2_wrt_joint1 = np.matmul(joint1_rot_mat_inv, x_joint2)
-    x_joint2_wrt_joint1[1] = 0
-    x_joint2_wrt_joint1_length = np.linalg.norm(x_joint2_wrt_joint1)
-
-    if x_joint2_wrt_joint1_length < length_threshold:
-        x_joint2 = shoulder_vector_in_prev_frame.copy()
-        x_joint2 *= -1
-        x_joint2_wrt_joint1 = np.matmul(joint1_rot_mat_inv, x_joint2)
-        x_joint2_wrt_joint1[1] = 0
-        x_joint2_wrt_joint1_length = np.linalg.norm(x_joint2_wrt_joint1)
-    else:
-        shoulder_vector_in_prev_frame = XYZ_landmarks[landmark_dictionary.index("left elbow")].copy()
-
-    x_unit_joint2_wrt_joint1 = x_joint2_wrt_joint1 / x_joint2_wrt_joint1_length
-    z_unit_joint2_wrt_joint1 = np.array([-x_unit_joint2_wrt_joint1[-1], 
-        x_unit_joint2_wrt_joint1[1], 
-        x_unit_joint2_wrt_joint1[0]])
-    y_unit_joint2_wrt_joint1 = np.cross(z_unit_joint2_wrt_joint1, x_unit_joint2_wrt_joint1)
-
-    assert 1 - np.linalg.norm(y_unit_joint2_wrt_joint1) < 1e-3
-    assert 1 - np.linalg.norm(z_unit_joint2_wrt_joint1) < 1e-3
-
-    joint2_rot_mat_wrt_joint1 = np.hstack([x_unit_joint2_wrt_joint1[:, None], 
-        y_unit_joint2_wrt_joint1[:, None], 
-        z_unit_joint2_wrt_joint1[:, None]])
-
-    joint2_angle = -np.arcsin(joint2_rot_mat_wrt_joint1[0, -1])
-    joint2_angle = np.degrees(joint2_angle)
-
-    joint2_angle = -joint2_angle
-
-    joint2_rot_mat = np.matmul(joint1_rot_mat, joint2_rot_mat_wrt_joint1)
-
-    return joint2_angle, joint2_rot_mat, joint2_rot_mat_wrt_joint1
+joint6_max = 52
+joint6_min = -69
 
 def get_angle_and_rot_mats(XYZ_landmarks, 
     landmark_name,
@@ -223,7 +121,7 @@ def cvt_angle_to_TomOSPC_angle(angle, joint_name):
     elif joint_name == "joint5":
         tomospc_angle = joint5_angle_to_TomOSPC_angle(angle)
     else:
-        tomospc_angle = joint6_angle_to_TomOSPC_angle()
+        tomospc_angle = joint6_angle_to_TomOSPC_angle(angle)
     
     return tomospc_angle
 
@@ -282,7 +180,12 @@ def joint5_angle_to_TomOSPC_angle(joint5_angle):
     Output:
         tomospc_angle_j5 (int): 
     """
-    tomospc_angle_j5 = None
+    if joint5_angle > 115:
+        tomospc_angle_j5 = round(min(210, -joint5_angle + 360))
+    else:
+        tomospc_angle_j5 = round(joint5_angle)
+
+    tomospc_angle_j5 = joint5_angle
     return tomospc_angle_j5
 
 def joint6_angle_to_TomOSPC_angle(joint6_angle):
@@ -293,7 +196,7 @@ def joint6_angle_to_TomOSPC_angle(joint6_angle):
     Output:
         tomospc_angle_j6 (int): 
     """
-    tomospc_angle_j6 = None
+    tomospc_angle_j6 = joint6_angle
     return tomospc_angle_j6
 
 def calculate_yaw_angle(rotation_matrix, cvt_to_degree=True):
@@ -386,7 +289,14 @@ def get_wrist_vector(XYZ_landmarks, landmark_dictionary):
     Output:
         wrist_vec:
     """
-    wrist_vec = None
+    wrist_landmark = XYZ_landmarks[landmark_dictionary.index("WRIST")].copy()
+    index_finger_landmark = XYZ_landmarks[landmark_dictionary.index("INDEX_FINGER_MCP")].copy()
+    middle_finger_landmark = XYZ_landmarks[landmark_dictionary.index("MIDDLE_FINGER_MCP")].copy()
+
+    u_wrist = index_finger_landmark - wrist_landmark
+    v_wrist = middle_finger_landmark = wrist_landmark
+
+    wrist_vec = np.cross(v_wrist, u_wrist)
     return wrist_vec
 
 def create_rot_mat(unit_vector, joint_name):
@@ -410,9 +320,9 @@ def create_rot_mat(unit_vector, joint_name):
     elif joint_name == "joint4":
         rot_mat = create_joint2_rot_mat(unit_vector)
     elif joint_name == "joint5":
-        rot_mat = create_joint5_rot_mat()
+        rot_mat = create_joint1_rot_mat(unit_vector)
     else:
-        rot_mat = create_joint6_rot_mat()
+        rot_mat = create_joint2_rot_mat(unit_vector)
     return rot_mat
 
 def create_joint1_rot_mat(j1_x_unit):
@@ -460,26 +370,6 @@ def create_joint2_rot_mat(j2_x_unit):
         j2_z_unit[:, None]])
 
     return j2_rot_mat
-
-def create_joint5_rot_mat():
-    """
-    TODO: doc.
-    Output:
-        j5_rot_mat (np.array): shape = (3, 3); each column is a vector (x, y, z) (horizontally stack)
-    """
-    j5_rot_mat = None
-
-    return j5_rot_mat
-
-def create_joint6_rot_mat():
-    """
-    TODO: doc.
-    Output:
-        j6_rot_mat (np.array): shape = (3, 3); each column is a vector (x, y, z) (horizontally stack)
-    """
-    j6_rot_mat = None
-
-    return j6_rot_mat
 
 def calculate_the_next_two_joints_angle(XYZ_landmarks,
     landmark_name,
@@ -566,6 +456,7 @@ def calculate_six_arm_angles(XYZ_landmarks, origin_coordinate, landmark_dictiona
     global wrist_vector_in_prev_frame
     global rotation_matrix_for_shoulder 
     global rotation_matrix_for_elbow 
+    global rotation_matrix_for_wrist
 
     j1_j2_results = calculate_the_next_two_joints_angle(
         XYZ_landmarks=XYZ_landmarks,
@@ -608,10 +499,26 @@ def calculate_six_arm_angles(XYZ_landmarks, origin_coordinate, landmark_dictiona
     j4_rot_mat_wrt_j3 = j3_j4_results["younger_brother_rot_mat_wrt_older_brother"] 
     elbow_vector_in_prev_frame = j3_j4_results["vector_in_current_frame"].copy()
 
-    angle_j5, angle_j6 = 0, 0
-    
-    j5_rot_mat_wrt_origin, j6_rot_mat_wrt_origin = None, None
-    j5_rot_mat_wrt_j4, j6_rot_mat_wrt_j5 = None, None
+    j5_j6_resulst = calculate_the_next_two_joints_angle(
+        XYZ_landmarks=XYZ_landmarks,
+        landmark_dictionary=landmark_dictionary,
+        landmark_name="wrist",
+        parent_coordinate=j4_rot_mat_wrt_origin,
+        vector_in_prev_frame=wrist_vector_in_prev_frame,
+        rotation_matrix_to_rearrange_coordinate=rotation_matrix_for_wrist,
+        angle_range_of_two_joints=[[None, None], [None, None]],
+        axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints=[None, None],
+        get_the_opposite_of_two_joints=[True, True],
+        limit_angle_of_two_joints=[False, False]
+    )
+
+    angle_j5 = j5_j6_resulst["older_brother_angle"]
+    j5_rot_mat_wrt_origin = j5_j6_resulst["older_brother_rot_mat_wrt_origin"]
+    j5_rot_mat_wrt_j4 = j5_j6_resulst["older_brother_rot_mat_wrt_parent"]
+    angle_j6 = j5_j6_resulst["younger_brother_angle"]
+    j6_rot_mat_wrt_origin = j5_j6_resulst["younger_brother_rot_mat_wrt_origin"]
+    j6_rot_mat_wrt_j5 = j5_j6_resulst["younger_brother_rot_mat_wrt_older_brother"]
+    wrist_vector_in_prev_frame = j5_j6_resulst["vector_in_current_frame"].copy()
 
     angles = (angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6)
     coordinates_wrt_origin = (j1_rot_mat_wrt_origin, j2_rot_mat_wrt_origin,

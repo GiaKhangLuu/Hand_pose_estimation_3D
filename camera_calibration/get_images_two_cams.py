@@ -49,6 +49,8 @@ def process_oak(oak_queue, mxid=None):
         device_oak = dai.Device(pipeline_oak)
     rgb_queue_oak = device_oak.getOutputQueue(name="rgb", maxSize=4, blocking=False)
 
+    print("Successfully connected to: ", mxid)
+
     while True:
         rgb_frame_oak = rgb_queue_oak.get()
 
