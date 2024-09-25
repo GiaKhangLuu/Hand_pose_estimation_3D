@@ -144,7 +144,7 @@ fusing_phase:
     model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/best_model_2024-08-15-14:03.pth
   minimize_distance:
     algo_name: L-BFGS-B
-    tolerance: 1e-5
+    tolerance: 1e-3
   ann:
     input_dim: 322
     output_dim: 144
@@ -172,7 +172,7 @@ process_frame:
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_angles: true
+  save_angles: false
   save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
   save_images: false
 

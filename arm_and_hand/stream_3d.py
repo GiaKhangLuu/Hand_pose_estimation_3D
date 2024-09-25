@@ -8,21 +8,9 @@ import numpy as np
 import open3d as o3d
 import threading
 import time
-from scipy.spatial.transform import Rotation as R
-
-from angle_calculation import (calculate_angle_j1,
-    calculate_angle_j2,
-    calculate_angle_j3,
-    calculate_angle_j4,
-    calculate_angle_j5,
-    calculate_angle_j6,
-    calculate_rotation_matrix_to_compute_angle_of_j1_and_j2,
-    calculate_elbow_coordinate_wrt_origin,
-    calculate_elbow_coordinate_wrt_shoulder,
-    calculate_wrist_coordinate_wrt_origin,
-    calculate_wrist_coordinate_wrt_elbow)
-
-from angle_calculation_v2 import calculate_six_arm_angles, rotation_matrix_for_elbow
+from angle_calculation import (calculate_six_arm_angles, 
+    rotation_matrix_for_elbow,
+    rotation_matrix_for_wrist)
 
 def visualize_arm(lmks_queue,
     landmark_dictionary, 
@@ -93,8 +81,8 @@ def visualize_arm(lmks_queue,
             angles, rot_mats_wrt_origin, rot_mats_wrt_parent = calculate_six_arm_angles(pts,
                 original_xyz,
                 landmark_dictionary)
-            angle_j1, angle_j2, angle_j3, angle_j4, _, _ = angles
-            j1_rm, j2_rm, j3_rm, j4_rm, _, _ = rot_mats_wrt_origin
+            angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
+            j1_rm, j2_rm, j3_rm, j4_rm, j5_rm, j6_rm = rot_mats_wrt_origin
 
             if show_left_arm_j1:
                 x_j1, y_j1, z_j1 = j1_rm[:, 0],  j1_rm[:, 1], j1_rm[:, 2]
@@ -112,6 +100,7 @@ def visualize_arm(lmks_queue,
                 colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
                 print("Angle j2: ", angle_j2)
 
+            if show_left_arm_j3:
                 # Uncomment these lines to plot joint2_prime_wrt_o (align with joint3 and joint4)
                 #j2_p_rm = j2_rm @ rotation_matrix_for_elbow
                 #x_j2_p_rm, y_j2_p_rm, z_j2_p_rm = j2_p_rm[:, 0], j2_p_rm[:, 1], j2_p_rm[:, 2]
@@ -120,7 +109,6 @@ def visualize_arm(lmks_queue,
                 #lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
                 #colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-            if show_left_arm_j3:
                 x_j3, y_j3, z_j3 = j3_rm[:, 0],  j3_rm[:, 1], j3_rm[:, 2]
                 pts = np.concatenate([pts, [x_j3 * 40, y_j3 * 40, z_j3 * 40]], axis=0)
                 last_index = pts.shape[0] - 1
@@ -136,26 +124,46 @@ def visualize_arm(lmks_queue,
                 colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
                 print("Angle j4: ", angle_j4)
 
-            if show_left_arm_j5 or show_left_arm_j6:
-                x_wrist, y_wrist, z_wrist = wrist_coordinate_wrt_origin[:, 0], wrist_coordinate_wrt_origin[:, 1], wrist_coordinate_wrt_origin[:, 2]
-                wrist_coordinate_wrt_elbow = calculate_wrist_coordinate_wrt_elbow(elbow_coordinate_wrt_origin,
-                    wrist_coordinate_wrt_origin)  # (3, O), O = number of vectors (xyz)
-                wrist_coordinate_wrt_elbow_rot_mat = R.from_matrix(wrist_coordinate_wrt_elbow)
+            if show_left_arm_j5:
+                wrist_idx = landmark_dictionary.index("WRIST")
+                wrist_landmark = pts[wrist_idx].copy()
+                # Uncomment these lines to plot joint4_prime_wrt_o (align with joint5 and joint6)
+                #j4_p_rm = j4_rm @ rotation_matrix_for_wrist 
+                #x_j4_p_rm, y_j4_p_rm, z_j4_p_rm = j4_p_rm[:, 0], j4_p_rm[:, 1], j4_p_rm[:, 2]
+                #x_j4_p_rm = x_j4_p_rm * 40 + wrist_landmark
+                #y_j4_p_rm = y_j4_p_rm * 40 + wrist_landmark
+                #z_j4_p_rm = z_j4_p_rm * 40 + wrist_landmark
 
-                pts = np.concatenate([pts, [x_wrist * 40, y_wrist * 40, z_wrist * 40]], axis=0)
+                #pts = np.concatenate([pts, [x_j4_p_rm, y_j4_p_rm, z_j4_p_rm]], axis=0)
+                #last_index = pts.shape[0] - 1
+                #lines.extend([[wrist_idx, last_index - 2], [wrist_idx, last_index - 1], [wrist_idx, last_index]])
+                #colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+                x_j5, y_j5, z_j5 = j5_rm[:, 0], j5_rm[:, 1], j5_rm[:, 2]
+                x_j5 = x_j5 * 40 + wrist_landmark
+                y_j5 = y_j5 * 40 + wrist_landmark 
+                z_j5 = z_j5 * 40 + wrist_landmark 
+
+                pts = np.concatenate([pts, [x_j5, y_j5, z_j5]], axis=0)
                 last_index = pts.shape[0] - 1
-                lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
-                colors.extend([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
+                lines.extend([[wrist_idx, last_index - 2], [wrist_idx, last_index - 1], [wrist_idx, last_index]])
+                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                print("Angle j5: ", angle_j5)
 
-                if show_left_arm_j5:
-                    angle_j5 = calculate_angle_j5(wrist_coordinate_wrt_elbow_rot_mat, wrist_coordinate_wrt_elbow)
-                    print("----------")
-                    print("Angle j5: ", angle_j5)
-                if show_left_arm_j6:
-                    angle_j6 = calculate_angle_j6(wrist_coordinate_wrt_elbow_rot_mat)
-                    print("----------")
-                    print("Angle j6: ", angle_j6)
-            
+            if show_left_arm_j6:
+                wrist_idx = landmark_dictionary.index("WRIST")
+                wrist_landmark = pts[wrist_idx].copy()
+                x_j6, y_j6, z_j6 = j6_rm[:, 0], j6_rm[:, 1], j6_rm[:, 2]
+                x_j6 = x_j6 * 40 + wrist_landmark
+                y_j6 = y_j6 * 40 + wrist_landmark 
+                z_j6 = z_j6 * 40 + wrist_landmark 
+
+                pts = np.concatenate([pts, [x_j6, y_j6, z_j6]], axis=0)
+                last_index = pts.shape[0] - 1
+                lines.extend([[wrist_idx, last_index - 2], [wrist_idx, last_index - 1], [wrist_idx, last_index]])
+                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                print("Angle j6: ", angle_j6)
+
             pcd.points = o3d.utility.Vector3dVector(pts)
             line_set.points = o3d.utility.Vector3dVector(pts)  # Update the points
             line_set.lines = o3d.utility.Vector2iVector(lines)  # Update the lines
