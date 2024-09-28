@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from scipy.spatial.distance import euclidean
 import glob
-import sklearn
+from landmarks_scaler import LandmarksScaler
 
 class HandArmLandmarksDataset_ANN(Dataset):
     def __init__(self, 
@@ -20,8 +20,7 @@ class HandArmLandmarksDataset_ANN(Dataset):
         lefthand_distance_thres=200,
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True,
-        scaler=None,
-        columns_to_scale=None):
+        scaler=None):
         """
         We use body_lines to calculate the distance between two adjacent landmarks and filter out
         outlier with the threshold. For more info., check out notebook "data/label_for_fusing_model.ipynb".
@@ -35,12 +34,6 @@ class HandArmLandmarksDataset_ANN(Dataset):
         self._leftarm_distance_thres = leftarm_distance_thres
         self._lefthand_distance_thres = lefthand_distance_thres
         self._scaler = scaler
-        self._columns_to_scale = columns_to_scale
-
-        self._left_camera_first_intrinsic_value_idx = 144
-        self._right_camera_first_lmk_value_idx = self._left_camera_first_intrinsic_value_idx + 9
-        self._right_camera_first_intrinsic_value_idx = self._right_camera_first_lmk_value_idx + 144
-        self._first_right_2_left_matrix_value_idx = self._right_camera_first_intrinsic_value_idx + 9
 
         for filepath in filepaths:
             data = pd.read_csv(filepath)
@@ -62,43 +55,8 @@ class HandArmLandmarksDataset_ANN(Dataset):
             self._filter_outlier()
         
         if self._scaler:
-            assert isinstance(self._scaler, sklearn.preprocessing._data.MinMaxScaler)
-            assert self._columns_to_scale
-
-            left_camera_lmks = self._inputs[:, :self._left_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
-            left_camera_intrinsic = self._inputs[:, self._left_camera_first_intrinsic_value_idx:self._right_camera_first_lmk_value_idx]  # shape: (N, 9), N = #rows
-            right_camera_lmks = self._inputs[:, self._right_camera_first_lmk_value_idx:self._right_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
-            right_camera_intrinsic = self._inputs[:, self._right_camera_first_intrinsic_value_idx:self._first_right_2_left_matrix_value_idx]  # shape: (N, 9), N = #rows
-            right_2_left_mat = self._inputs[:, self._first_right_2_left_matrix_value_idx:]  # shape: (N, 16), N = #rows
-
-            left_camera_lmks = left_camera_lmks.reshape(-1, 3, 48)  # shape: (N, 3, 48)
-            right_camera_lmks = right_camera_lmks.reshape(-1, 3, 48)  # shape: (N, 3, 48)
-            left_camera_lmks_z = left_camera_lmks[:, -1, :]  # shape: (N, 48)
-            right_camera_lmks_z = right_camera_lmks[:, -1, :]  # shape: (N, 48)
-
-            scaled_input = np.concatenate([left_camera_lmks_z, 
-                left_camera_intrinsic,
-                right_camera_lmks_z,
-                right_camera_intrinsic,
-                right_2_left_mat], axis=1)  # shape: (N, 130)
-            scaled_input = self._scaler.transform(scaled_input)
-            scaled_input = pd.DataFrame(scaled_input, columns=self._columns_to_scale)
-            scaled_left_camera_lmks_z = scaled_input.loc[:, "left_shoulder_cam_left_z":"right_pinky_tip_cam_left_z"]  # shape: (N, 48)
-            scaled_right_camera_lmks_z = scaled_input.loc[:, "left_shoulder_cam_right_z":"right_pinky_tip_cam_right_z"]  # shape: (N, 48)
-            scaled_left_camera_intr = scaled_input.loc[:, "left_camera_intrinsic_x11":"left_camera_intrinsic_x33"]  # shape: (N, 9)
-            scaled_right_camera_intr = scaled_input.loc[:, "right_camera_intrinsic_x11":"right_camera_intrinsic_x33"]  # shape: (N , 9)
-            scaled_right_2_left_mat = scaled_input.loc[:, "right_to_left_matrix_x11":"right_to_left_matrix_x44"]  # shape: (N, 16)
-
-            left_camera_lmks[:, -1, :] = scaled_left_camera_lmks_z  # shape: (N, 3, 48)
-            right_camera_lmks[:, -1, :] = scaled_right_camera_lmks_z  # shape: (N, 3, 48)
-            left_camera_lmks = left_camera_lmks.reshape(-1, 3 * 48)  # shape: (N, 144)
-            right_camera_lmks = right_camera_lmks.reshape(-1, 3 * 48)  # shape:( N, 144)
-
-            self._inputs = np.concatenate([left_camera_lmks,
-                scaled_left_camera_intr,
-                right_camera_lmks,
-                scaled_right_camera_intr,
-                scaled_right_2_left_mat], axis=1)
+            assert isinstance(self._scaler, LandmarksScaler)
+            self._inputs = self._scaler(self._inputs)
 
     def _keep_frames_contain_lefthand(self):
         fusing_lmks = self._outputs.copy()  

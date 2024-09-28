@@ -19,7 +19,6 @@ import time
 import shutil
 import socket
 import math
-from filterpy.kalman import KalmanFilter
 from datetime import datetime
 
 from stream_3d import visualize_arm, visualize_hand
@@ -33,13 +32,14 @@ from csv_writer import (create_csv,
 from utilities import (convert_to_shoulder_coord,
     convert_to_wrist_coord,
     flatten_two_camera_input)
-from kalman_filter import predict_and_correct
 from common import (load_data_from_npz_file,
     get_oak_2_rs_matrix,
     load_config)
 from send_data_to_robot import send_udp_message
 from landmarks_detectors import LandmarksDetectors
 from landmarks_fuser import LandmarksFuser
+from landmarks_noise_reducer import LandmarksNoiseReducer
+from angle_noise_reducer import AngleNoiseReducer
 
 # ------------------- READ CONFIG ------------------- 
 config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml") 
@@ -70,6 +70,12 @@ fusing_enable = config["fusing_phase"]["enable"]
 fusing_method_list = tuple(config["fusing_phase"]["fusing_methods"])
 fusing_method_selection_id = config["fusing_phase"]["fusing_selection_id"]
 
+reduce_noise_config = config["reduce_noise_phase"]
+enable_landmarks_noise_reducer = reduce_noise_config["landmarks_noise_reducer"]["enable"]
+landmarks_noise_statistical_file = reduce_noise_config["landmarks_noise_reducer"]["statistical_file"]
+enable_angles_noise_reducer = reduce_noise_config["angles_noise_reducer"]["enable"]
+angles_noise_statistical_file = reduce_noise_config["angles_noise_reducer"]["statistical_file"]
+
 draw_xyz = config["debugging_mode"]["draw_xyz"]
 debug_angle_j1 = config["debugging_mode"]["show_left_arm_angle_j1"]
 debug_angle_j2 = config["debugging_mode"]["show_left_arm_angle_j2"]
@@ -80,8 +86,6 @@ debug_angle_j6 = config["debugging_mode"]["show_left_arm_angle_j6"]
 ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
-use_fusing_network = fusing_method_list[fusing_method_selection_id] != "minimize_distance" 
-
 run_to_collect_data = config["run_to_collect_data_for_fusing_and_detection"]
 
 if run_to_collect_data:
@@ -89,17 +93,9 @@ if run_to_collect_data:
     send_udp = False
     save_landmarks = True
     save_images = True
-    #detection_model_selection_id = 0
     fusing_enable = True
     fusing_method_selection_id = 1
-    use_fusing_network = False
-    config["detection_phase"]["mediapipe"]["hand_detection"]["is_enable"] = True
-    config["detection_phase"]["mediapipe"]["body_detection"]["is_enable"] = True
     config["fusing_phase"]["minimize_distance"]["tolerance"] = 1e-5
-
-
-if (use_fusing_network):
-    save_landmarks = False
 
 # -------------------- GET TRANSFORMATION MATRIX -------------------- 
 right_cam_data = load_data_from_npz_file(right_cam_calib_path)
@@ -140,6 +136,10 @@ landmarks_detectors = LandmarksDetectors(detection_model_selection_id,
     detection_model_list, config["detection_phase"], draw_landmarks)
 landmarks_fuser = LandmarksFuser(fusing_method_selection_id,
     fusing_method_list, config["fusing_phase"], frame_size)
+if enable_landmarks_noise_reducer:
+    landmarks_noise_reducer = LandmarksNoiseReducer(landmarks_noise_statistical_file)
+if enable_angles_noise_reducer:
+    angle_noise_reducer = AngleNoiseReducer(angles_noise_statistical_file=angles_noise_statistical_file)
 
 if __name__ == "__main__":
     if (save_landmarks or
@@ -178,9 +178,8 @@ if __name__ == "__main__":
     right_oak_thread.start()
 
     if send_udp:
-        lerp_factor = 0.2
         send_data_thread = threading.Thread(target=send_udp_message, args=(TARGET_ANGLES_QUEUE,
-            True, lerp_factor,), daemon=True)
+            True,), daemon=True)
         send_data_thread.start()
 
     if plot_3d:
@@ -237,12 +236,14 @@ if __name__ == "__main__":
             right_camera_body_landmarks_xyZ is not None and
             left_camera_body_landmarks_xyZ.shape[0] == len(arm_hand_fused_names) and
             left_camera_body_landmarks_xyZ.shape[0] == right_camera_body_landmarks_xyZ.shape[0]):
-            # JUST FUSE TO XYZ, MANUAL CONVERT TO SHOULDER_COORDINATE
             arm_hand_fused_XYZ = landmarks_fuser.fuse(left_camera_body_landmarks_xyZ,
                 right_camera_body_landmarks_xyZ,
                 left_camera_intr,
                 right_camera_intr,
                 right_2_left_mat_avg)
+
+            if enable_landmarks_noise_reducer:
+                arm_hand_fused_XYZ = landmarks_noise_reducer(arm_hand_fused_XYZ)
 
             arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
                 arm_hand_fused_XYZ,
@@ -254,9 +255,22 @@ if __name__ == "__main__":
                 angles, rot_mats_wrt_origin, rot_mats_wrt_parent = calculate_six_arm_angles(arm_hand_XYZ_wrt_shoulder,
                     xyz_origin,
                     arm_hand_fused_names)
-                angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
 
-                arm_angles = np.array([angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6])
+                # Uncomment these two lines below to carefully test on real robot because joint4, joint5 and joint6 dont in a danger position when colliding.
+                #angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
+                #angles = np.array([0,0,0, angle_j4, angle_j5, angle_j6])
+                
+                if save_angles:
+                    raw_angles = [*angles]
+
+                if enable_angles_noise_reducer:
+                    angles = np.array(angles)
+                    angles = angle_noise_reducer(angles)
+
+                if save_angles:
+                    smoothed_angles = [*angles]
+
+                arm_angles = np.array(angles)
 
                 if send_udp:
                     TARGET_ANGLES_QUEUE.put((arm_angles, timestamp))
@@ -274,8 +288,11 @@ if __name__ == "__main__":
                     delta_t_ms = delta_t * 1000
                     current_frame_time = next_frame_time
                     delta_fps = round(1000 / delta_t_ms, 1)
-                    angles_writed_to_file = [timestamp, delta_fps, angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6]
-                    append_to_csv(ARM_ANGLE_CSV_PATH, angles_writed_to_file)
+                    row_writed_to_file = [timestamp, 
+                        delta_fps, 
+                        *raw_angles,
+                        *smoothed_angles]
+                    append_to_csv(ARM_ANGLE_CSV_PATH, row_writed_to_file)
 
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
                     output_landmarks = np.concatenate([arm_hand_fused_XYZ, 

@@ -7,6 +7,8 @@ from ann import ANN
 from utilities import (fuse_landmarks_from_two_cameras,
     convert_to_shoulder_coord,
     flatten_two_camera_input)
+from landmarks_scaler import LandmarksScaler
+from csv_writer import columns_to_normalize
 
 class LandmarksFuser:
     """
@@ -63,6 +65,9 @@ class LandmarksFuser:
             num_hidden_layers = config_by_method["num_hidden_layers"]
             dropout_rate = config_by_method["dropout_rate"]
             model_weight_path = config_by_method["model_weight_path"]
+            minmax_scaler_path = config_by_method["minmax_scaler_path"]
+            self._landmarks_scaler = LandmarksScaler(columns_to_scale=columns_to_normalize,
+                scaler_path=minmax_scaler_path)
             self._img_size = img_size
             self._fusing_model = ANN(input_dim=input_dim,
                 output_dim=output_dim,
@@ -121,9 +126,6 @@ class LandmarksFuser:
                 right_side_cam_intrinsic=right_camera_intr,
                 opposite_cam_intrinsic=left_camera_intr,
                 right_to_opposite_correctmat=right_2_left_matrix)
-            #arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
-                #arm_hand_fused_XYZ,
-                #self._arm_hand_fused_names)
         elif self._method_name == "ann":
             # -------------------- FUSE BY ANN-------------------- 
             input_row = flatten_two_camera_input(left_camera_landmarks_xyZ=left_camera_wholebody_xyZ,
@@ -135,6 +137,7 @@ class LandmarksFuser:
                 mode="input")
             input_row = np.array(input_row)  # shape: (144)
             input_row = input_row[None, :]  # shape: (1, 144)
+            input_row = self._landmarks_scaler(input_row)
             input_row = torch.tensor(input_row, dtype=torch.float32)
             with torch.no_grad():
                 input_row = input_row.to("cuda")
@@ -143,6 +146,7 @@ class LandmarksFuser:
                 output_row = output_row.reshape(3, 48)  # shape: (3, 48)
                 output_row = output_row.T  # shape: (48, 3)
 
+                # For now, we just need to get the first 26 landmarks (left_shoulder -> left_pinky_tip)
                 arm_hand_fused_XYZ = output_row[:26, :]
         else:
             assert 0 == 1

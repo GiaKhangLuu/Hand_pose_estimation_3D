@@ -1,4 +1,4 @@
-send_udp: true
+send_udp: false
 run_to_collect_data_for_fusing_and_detection: false
 
 detection_phase:
@@ -82,7 +82,7 @@ detection_phase:
         - right foot index
   mmpose:
     convert_color_channel: false
-    landmark_thresh: 0.6
+    landmark_thresh: 0.5
     person_detection:
       is_enable: true
       person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
@@ -90,9 +90,9 @@ detection_phase:
     pose_estimation:
       is_enable: true
       left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/best_20240923_left_camera_weight.pth
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_left_cam_epoch40_weight.pth
       right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/best_20240923_right_camera_weight.pth
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_right_cam_epoch40_weight.pth
       #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
       #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
       #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
@@ -149,9 +149,18 @@ fusing_phase:
     input_dim: 322
     output_dim: 144
     hidden_dim: 256
-    num_hidden_layers: 1
-    dropout_rate: 0.2
-    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240829/20240829-1753/ann_best.path
+    num_hidden_layers: 4
+    dropout_rate: 0.1
+    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240925/20240925-1010/ann_best.pth
+    minmax_scaler_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240925/20240925-1010/input_scaler.pkl
+
+reduce_noise_phase:
+  landmarks_noise_reducer:
+    enable: false
+    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/landmarks_stats.json
+  angles_noise_reducer:
+    enable: true
+    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/angles_stats.json
 
 camera:
   frame_calibrated_size:

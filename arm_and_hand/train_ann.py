@@ -17,6 +17,8 @@ from csv_writer import columns_to_normalize, fusion_csv_columns_name
 import pandas as pd
 import joblib
 
+from landmarks_scaler import LandmarksScaler
+
 class EarlyStopping:
     def __init__(self, patience=5, verbose=False, delta=0):
         self.patience = patience
@@ -188,12 +190,16 @@ if __name__ == "__main__":
 
     fake_train_paths = glob.glob(os.path.join(DATA_DIR, "fake_data", "train", "fake_*.csv"))
     fake_val_paths = glob.glob(os.path.join(DATA_DIR, "fake_data", "val", "fake_*.csv"))
+    #fake_train_paths = []
+    #fake_val_paths = []
 
     if len(fake_train_paths) > 0:
         train_paths.extend(fake_train_paths)
     if len(fake_val_paths) > 0:
         val_paths.extend(fake_val_paths)
 
+    scaler = LandmarksScaler(columns_to_scale=columns_to_normalize,
+        scaler_path=scaler_save_path)
     train_dataset = HandArmLandmarksDataset_ANN(train_paths, 
         body_lines, 
         lefthand_lines, 
@@ -202,8 +208,7 @@ if __name__ == "__main__":
         train_lefthand_distance_thres,
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True,
-        scaler=minmax_scaler,
-        columns_to_scale=columns_to_normalize)
+        scaler=scaler)
     train_dataloader = DataLoader(train_dataset, batch_size=256, shuffle=True)
     val_dataset = HandArmLandmarksDataset_ANN(val_paths,
         body_lines,
@@ -213,8 +218,7 @@ if __name__ == "__main__":
         val_lefthand_distance_thres,
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True,
-        scaler=minmax_scaler,
-        columns_to_scale=columns_to_normalize)
+        scaler=scaler)
     val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=False)  
 
     pretrained_weight_path = None
@@ -222,11 +226,11 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load(pretrained_weight_path))
         print("Loaded existing model weights: ", pretrained_weight_path)
 
-    criterion = nn.SmoothL1Loss(reduction="mean")
+    criterion = nn.MSELoss(reduction="mean")
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     num_epochs = 50000
     current_time = datetime.now().strftime('%Y%m%d-%H%M')
-    save_path = os.path.join(SAVE_DIR, "{}_best.pth".format(MODEL_NAME))
+    save_path = os.path.join(SAVE_DIR, "{}_{}_layers_best.pth".format(MODEL_NAME, num_hidden_layers))
     scheduler = ReduceLROnPlateau(optimizer, mode='min', 
         factor=math.sqrt(0.1), patience=1000, verbose=True, min_lr=1e-8)
     #early_stopping = EarlyStopping(patience=7000, verbose=True)

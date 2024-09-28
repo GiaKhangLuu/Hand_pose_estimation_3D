@@ -1,0 +1,32 @@
+{
+    "joint1": {
+        "measure_noise": 6.741735180055461,
+        "filter_state_estimate": 7.950413223140496,
+        "cov": 0.7413428044532494
+    },
+    "joint2": {
+        "measure_noise": 1.1387293560562217,
+        "filter_state_estimate": 8.837036477388244,
+        "cov": 0.5815730600473648
+    },
+    "joint3": {
+        "measure_noise": 10.5512715572164,
+        "filter_state_estimate": -5.0,
+        "cov": 0.6889091986903961
+    },
+    "joint4": {
+        "measure_noise": 3.1160881484363494,
+        "filter_state_estimate": -5.33130398168459,
+        "cov": 2.111783356338099
+    },
+    "joint5": {
+        "measure_noise": 23.614200554016637,
+        "filter_state_estimate": 0.8512396694214877,
+        "cov": 41.680349702889146
+    },
+    "joint6": {
+        "measure_noise": 3.158648275301647,
+        "filter_state_estimate": -8.674618072801021,
+        "cov": 3.7881147111195133
+    }
+}
