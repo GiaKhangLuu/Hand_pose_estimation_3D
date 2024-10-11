@@ -190,8 +190,8 @@ utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
   save_angles: false
-  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: false
+  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: true
 
 debugging_mode:
   draw_xyz: false
@@ -205,10 +205,10 @@ debugging_mode:
     show_left_arm_joint6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
   show_left_hand:
     THUMB:
-      show_parent_coordinate: false
-      show_left_finger_joint1: true 
-      show_left_finger_joint2: true 
-      show_left_finger_joint3: false 
+      show_parent_coordinate: true
+      show_left_finger_joint1: false 
+      show_left_finger_joint2: false 
+      show_left_finger_joint3: true 
     INDEX:
       show_parent_coordinate: false
       show_left_finger_joint1: false

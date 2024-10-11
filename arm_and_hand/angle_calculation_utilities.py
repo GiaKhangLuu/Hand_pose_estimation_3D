@@ -15,7 +15,8 @@ def get_angle_and_rot_mats(vector_landmark,
     axis_to_get_the_opposite_if_angle_exceed_the_limit=None,
     angle_range=None,
     get_the_opposite=False,
-    limit_angle=False):
+    limit_angle=False,
+    clip_angle=True):
     """
     TODO: Doc.
     """
@@ -56,7 +57,8 @@ def get_angle_and_rot_mats(vector_landmark,
         angle = calculate_angle_func(rot_mat_wrt_parent)
         angle = map_to_robot_angle_func(angle)
 
-    angle = np.clip(angle, angle_range[0], angle_range[1])
+    if clip_angle:
+        angle = np.clip(angle, angle_range[0], angle_range[1])
 
     rot_mat_wrt_origin = np.matmul(parent_rot_mat, rot_mat_wrt_parent)
 
@@ -160,6 +162,7 @@ def calculate_the_next_two_joints_angle(vector_landmark,
     axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints,
     get_the_opposite_of_two_joints,
     limit_angle_of_two_joints,
+    clip_angle_of_two_joints,
     calculate_the_second_joint=True):
     """
     TODO: Doc.
@@ -172,6 +175,7 @@ def calculate_the_next_two_joints_angle(vector_landmark,
     axis_to_get_oppo_if_exceed_first_joint, axis_to_get_oppo_if_exceed_second_joint = axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints
     get_oppo_flag_first_joint, get_oppo_flag_second_joint = get_the_opposite_of_two_joints
     limit_flag_first_joint, limit_flag_second_joint = limit_angle_of_two_joints
+    clip_flag_first_joint, clip_flag_second_joint = clip_angle_of_two_joints
 
     older_brother_result = get_angle_and_rot_mats(
         vector_landmark=vector_landmark,
@@ -185,7 +189,8 @@ def calculate_the_next_two_joints_angle(vector_landmark,
         axis_to_get_the_opposite_if_angle_exceed_the_limit=axis_to_get_oppo_if_exceed_first_joint,
         angle_range=min_max_first_joint,
         get_the_opposite=get_oppo_flag_first_joint,
-        limit_angle=limit_flag_first_joint)
+        limit_angle=limit_flag_first_joint,
+        clip_angle=clip_flag_first_joint)
     older_brother_angle = older_brother_result["angle"]
     older_brother_rot_mat_wrt_origin = older_brother_result["rot_mat_wrt_origin"]
     older_brother_rot_mat_wrt_parent = older_brother_result["rot_mat_wrt_parent"]
@@ -204,7 +209,8 @@ def calculate_the_next_two_joints_angle(vector_landmark,
             axis_to_get_the_opposite_if_angle_exceed_the_limit=axis_to_get_oppo_if_exceed_second_joint,
             angle_range=min_max_second_joint,
             get_the_opposite=get_oppo_flag_second_joint,
-            limit_angle=limit_flag_second_joint)
+            limit_angle=limit_flag_second_joint,
+            clip_angle=clip_flag_second_joint)
         younger_brother_angle = younger_brother_result["angle"]
         younger_brother_rot_mat_wrt_origin = younger_brother_result["rot_mat_wrt_origin"]
         younger_brother_rot_mat_wrt_older_brother = younger_brother_result["rot_mat_wrt_parent"]

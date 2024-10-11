@@ -27,7 +27,7 @@ def visualize_arm(lmks_queue,
                   [500, 0, 0],
                   [0, 500, 0],
                   [0, 0, 500]])
-    SCALE_FACTOR = 50
+    SCALE_FACTOR = 20
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(x)
 

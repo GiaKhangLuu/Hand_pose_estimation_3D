@@ -49,7 +49,7 @@ mcp_vector_in_init_frame = None
 ip_vector_in_init_frame = None
 
 rot_mat_to_rearrange_finger_coord = np.eye(3)
-rot_mat_for_ip = np.eye(3)
+rot_mat_for_ip = R.from_euler("x", 90, degrees=True).as_matrix()
 
 bound = 2
 joint1_min = -74 + bound
@@ -99,6 +99,10 @@ class LeftThumbFingerAngleCalculator(ChainAngleCalculator):
             [False, False]
         ]
         self.calculate_second_angle_flag_container = [True, False]
+        self._clip_angle_of_two_joints_flag_container = [
+            [True, True],
+            [True, True]
+        ]
 
         self._last_coord_of_real_person_to_last_coord_in_rviz_rot_mat = last_coord_of_real_person_to_last_coord_of_robot_in_rviz_rot_mat
         self._last_coord_of_robot_to_home_position_of_finger_rot_mat = R.from_quat(
@@ -118,7 +122,7 @@ class LeftThumbFingerAngleCalculator(ChainAngleCalculator):
         Output:
             tomospc_angle_j1 (int): 
         """
-        tomospc_angle_j1 = joint1_angle 
+        tomospc_angle_j1 = -joint1_angle 
         return tomospc_angle_j1 
 
     def _joint2_angle_to_TomOSPC_angle(self, joint2_angle):
@@ -129,7 +133,7 @@ class LeftThumbFingerAngleCalculator(ChainAngleCalculator):
         Output:
             tomospc_angle_j2 (int): 
         """
-        tomospc_angle_j2 = joint2_angle
+        tomospc_angle_j2 = -joint2_angle
         return tomospc_angle_j2 
 
     def _joint3_angle_to_TomOSPC_angle(self, joint3_angle):

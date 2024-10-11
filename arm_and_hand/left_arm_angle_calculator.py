@@ -63,6 +63,11 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
             [False, False]
         ]
         self.calculate_second_angle_flag_container = [True, True, True]
+        self._clip_angle_of_two_joints_flag_container = [
+            [True, True],
+            [True, True],
+            [True, True]
+        ]
 
         super().__init__(num_chain, landmark_dictionary)
 

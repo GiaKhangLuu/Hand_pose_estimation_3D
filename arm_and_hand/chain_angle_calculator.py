@@ -24,6 +24,14 @@ class ChainAngleCalculator(ABC):
         assert len(self._get_the_opposite_of_two_joints_flag_container) == self.num_chain
         assert len(self._limit_angle_of_two_joints_flag_container) == self.num_chain
         assert len(self.calculate_second_angle_flag_container) == self.num_chain
+        assert len(self._clip_angle_of_two_joints_flag_container) == self.num_chain
+
+        assert len(self._mapping_to_robot_angle_func_container[0]) == self.num_angles_each_chain
+        assert len(self._angle_range_of_two_joints_container[0]) == self.num_angles_each_chain
+        assert len(self._axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints_container[0]) == self.num_angles_each_chain
+        assert len(self._get_the_opposite_of_two_joints_flag_container[0]) == self.num_angles_each_chain
+        assert len(self._limit_angle_of_two_joints_flag_container[0]) == self.num_angles_each_chain
+        assert len(self._clip_angle_of_two_joints_flag_container[0]) == self.num_angles_each_chain
 
     def _update_vector_in_previous_frame(self, chain_idx, vector_in_current_frame):
         self._vector_landmark_in_previous_frame_container[chain_idx] = vector_in_current_frame
@@ -54,6 +62,7 @@ class ChainAngleCalculator(ABC):
             get_the_opposite_of_two_joints_flag = self._get_the_opposite_of_two_joints_flag_container[chain_idx]
             limit_angle_of_two_joints_flag = self._limit_angle_of_two_joints_flag_container[chain_idx]
             calculate_second_angle_flag = self.calculate_second_angle_flag_container[chain_idx]
+            clip_angle_of_two_joints_flag = self._clip_angle_of_two_joints_flag_container[chain_idx]
             
             result_of_chain = calculate_the_next_two_joints_angle(
                 vector_landmark=vector_landmark,
@@ -65,7 +74,8 @@ class ChainAngleCalculator(ABC):
                 axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints=axis_to_get_the_opposite,
                 get_the_opposite_of_two_joints=get_the_opposite_of_two_joints_flag,
                 limit_angle_of_two_joints=limit_angle_of_two_joints_flag,
-                calculate_the_second_joint=calculate_second_angle_flag 
+                calculate_the_second_joint=calculate_second_angle_flag,
+                clip_angle_of_two_joints=clip_angle_of_two_joints_flag
             )
             
             if self.calculate_second_angle_flag_container[chain_idx]:

@@ -98,6 +98,10 @@ class LeftFingerAngleCalculator(ChainAngleCalculator):
             [False, False]
         ]
         self.calculate_second_angle_flag_container = [True, False]
+        self._clip_angle_of_two_joints_flag_container = [
+            [True, True],
+            [True, True]
+        ]
 
         self._last_coord_of_real_person_to_last_coord_in_rviz_rot_mat = last_coord_of_real_person_to_last_coord_of_robot_in_rviz_rot_mat
         self._last_coord_of_robot_to_home_position_of_finger_rot_mat = R.from_quat(
