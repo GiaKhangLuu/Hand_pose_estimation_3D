@@ -1,4 +1,4 @@
-send_udp: false
+send_udp: true
 run_to_collect_data_for_fusing_and_detection: false
 
 detection_phase:
@@ -82,21 +82,28 @@ detection_phase:
         - right foot index
   mmpose:
     convert_color_channel: false
-    landmark_thresh: 0.5
+    landmark_thresh: 0.6
     person_detection:
       is_enable: true
       person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
       person_detector_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_weight.pth
     pose_estimation:
       is_enable: true
-      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_left_cam_epoch40_weight.pth
-      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_right_cam_epoch40_weight.pth
-      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_left_camera_weight.pth
-      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/best_24_08_24_right_camera_weight.pth
+      # ---- RTMPOSE-T ----
+      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/pretrained_rtmpose-t_config.py
+      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/20240928_left_cam_best_epoch1000_weight.pth
+      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/pretrained_rtmpose-t_config.py
+      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/20240928_right_cam_best_epoch900_weight.pth
+      # ---- RTMPOSE-S ----
+      #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_left_cam_best_epoch380_weight.pth
+      #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
+      #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_right_cam_best_epoch480_weight.pth
+      # ---- RTMPOSE-M ----
+      left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241010_left_cam_epoch300_weight.pth
+      right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241010_right_cam_epoch300_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -146,13 +153,13 @@ fusing_phase:
     algo_name: L-BFGS-B
     tolerance: 1e-3
   ann:
-    input_dim: 322
+    input_dim: 288
     output_dim: 144
-    hidden_dim: 256
-    num_hidden_layers: 4
+    hidden_dim: 216
+    num_hidden_layers: 8
     dropout_rate: 0.1
-    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240925/20240925-1010/ann_best.pth
-    minmax_scaler_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240925/20240925-1010/input_scaler.pkl
+    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240930/20240930-1308/ann_8_layers_best.pth
+    minmax_scaler_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240930/20240930-1308/input_scaler.pkl
 
 reduce_noise_phase:
   landmarks_noise_reducer:
@@ -161,11 +168,12 @@ reduce_noise_phase:
   angles_noise_reducer:
     enable: true
     statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/angles_stats.json
+    dim: 1
 
 camera:
   frame_calibrated_size:
-    width: 1280
-    height: 720
+    width: 1920
+    height: 1080
   left_camera:
     mxid: "18443010E13D641200"
     left_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/camera_calibration/left_oak_calibration.npz
@@ -187,12 +195,40 @@ utilities:
 
 debugging_mode:
   draw_xyz: false
-  show_left_arm_angle_j1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
-  show_left_arm_angle_j2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
-  show_left_arm_angle_j3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
-  show_left_arm_angle_j4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
-  show_left_arm_angle_j5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
-  show_left_arm_angle_j6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
+  show_left_arm:
+    show_parent_coordinate: false
+    show_left_arm_joint1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+    show_left_arm_joint2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
+    show_left_arm_joint3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
+    show_left_arm_joint4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
+    show_left_arm_joint5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
+    show_left_arm_joint6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
+  show_left_hand:
+    THUMB:
+      show_parent_coordinate: false
+      show_left_finger_joint1: true 
+      show_left_finger_joint2: true 
+      show_left_finger_joint3: false 
+    INDEX:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
+    MIDDLE:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
+    RING:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
+    PINKY:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
   ref_vector_color: 
     - 1
     - 0

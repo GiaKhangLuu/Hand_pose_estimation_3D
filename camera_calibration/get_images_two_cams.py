@@ -11,8 +11,8 @@ import shutil
 def process_realsense(rs_queue):
     pipeline_rs = rs.pipeline()
     config_rs = rs.config()
-    config_rs.enable_stream(rs.stream.color, 1280, 720, rs.format.bgr8, 30)
-    config_rs.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+    config_rs.enable_stream(rs.stream.color, 1920, 1080, rs.format.bgr8, 30)
+    config_rs.enable_stream(rs.stream.depth, 1920, 1080, rs.format.z16, 30)
     pipeline_rs.start(config_rs)
 
     while True:
@@ -56,7 +56,7 @@ def process_oak(oak_queue, mxid=None):
 
         frame_oak = rgb_frame_oak.getCvFrame()
 
-        frame_oak = cv2.resize(frame_oak, (1280, 720))
+        #frame_oak = cv2.resize(frame_oak, (1280, 720))
         #depth_oak_display = cv2.resize(depth_oak, (640, 480))
 
         oak_queue.put(frame_oak)
@@ -84,16 +84,18 @@ folder_path = './images'
 rs_path = './images/left_oak'
 oak_path = './images/right_oak'
 
+remove_old_images = True
 
-if os.path.exists(folder_path):
-    shutil.rmtree(folder_path)
-os.makedirs(folder_path)
+if remove_old_images:
+    if os.path.exists(folder_path):
+        shutil.rmtree(folder_path)
+    os.makedirs(folder_path)
 
-if not os.path.exists(rs_path):
-    os.makedirs(rs_path)
+    if not os.path.exists(rs_path):
+        os.makedirs(rs_path)
 
-if not os.path.exists(oak_path):
-    os.makedirs(oak_path)
+    if not os.path.exists(oak_path):
+        os.makedirs(oak_path)
 
 num = 0
 
@@ -103,10 +105,12 @@ while True:
     if (not left_oak_queue.empty()) and (not right_oak_queue.empty()):
         #rs_frame = rs_queue.get()
         left_frame = left_oak_queue.get()
-        cv2.imshow("Left OAK Combined", left_frame)
+        left_frame_stream = cv2.resize(left_frame, (1280, 720))
+        cv2.imshow("Left OAK Combined", left_frame_stream)
         
         right_frame = right_oak_queue.get()
-        cv2.imshow("Right OAK Combined", right_frame)
+        right_frame_stream = cv2.resize(right_frame, (1280, 720))
+        cv2.imshow("Right OAK Combined", right_frame_stream)
 
     k = cv2.waitKey(5)
 

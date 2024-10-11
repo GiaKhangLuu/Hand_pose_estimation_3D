@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from scipy.spatial.distance import euclidean
 import glob
 from landmarks_scaler import LandmarksScaler
+from csv_writer import fusion_csv_columns_name
 
 class HandArmLandmarksDataset_ANN(Dataset):
     def __init__(self, 
@@ -20,7 +21,8 @@ class HandArmLandmarksDataset_ANN(Dataset):
         lefthand_distance_thres=200,
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True,
-        scaler=None):
+        scaler=None,
+        keep_intrinsic_matrices=True):
         """
         We use body_lines to calculate the distance between two adjacent landmarks and filter out
         outlier with the threshold. For more info., check out notebook "data/label_for_fusing_model.ipynb".
@@ -34,6 +36,7 @@ class HandArmLandmarksDataset_ANN(Dataset):
         self._leftarm_distance_thres = leftarm_distance_thres
         self._lefthand_distance_thres = lefthand_distance_thres
         self._scaler = scaler
+        self._keep_intrinsic_matrices = keep_intrinsic_matrices
 
         for filepath in filepaths:
             data = pd.read_csv(filepath)
@@ -57,6 +60,24 @@ class HandArmLandmarksDataset_ANN(Dataset):
         if self._scaler:
             assert isinstance(self._scaler, LandmarksScaler)
             self._inputs = self._scaler(self._inputs)
+
+        if not self._keep_intrinsic_matrices:
+            input_df = pd.DataFrame(self._inputs, columns=fusion_csv_columns_name[1:fusion_csv_columns_name.index("left_shoulder_output_x")])
+            left_camera_first_lmks = "left_shoulder_cam_left_x"
+            left_camera_last_lmks = "right_pinky_tip_cam_left_z"
+            left_camera_first_idx = fusion_csv_columns_name.index(left_camera_first_lmks)
+            left_camera_last_idx = fusion_csv_columns_name.index(left_camera_last_lmks)
+            left_camera_lmks_columns_name = fusion_csv_columns_name[left_camera_first_idx:left_camera_last_idx+1]
+            left_camera_lmks = input_df.loc[:, left_camera_lmks_columns_name].values
+
+            right_camera_first_lmks = "left_shoulder_cam_right_x"
+            right_camera_last_lmks = "right_pinky_tip_cam_right_z"
+            right_camera_first_idx = fusion_csv_columns_name.index(right_camera_first_lmks)
+            right_camera_last_idx = fusion_csv_columns_name.index(right_camera_last_lmks)
+            right_camera_lmks_columns_name = fusion_csv_columns_name[right_camera_first_idx:right_camera_last_idx+1]
+            right_camera_lmks = input_df.loc[:, right_camera_lmks_columns_name].values
+
+            self._inputs = np.concatenate([left_camera_lmks, right_camera_lmks], axis=1)
 
     def _keep_frames_contain_lefthand(self):
         fusing_lmks = self._outputs.copy()  
