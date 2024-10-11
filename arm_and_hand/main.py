@@ -21,8 +21,7 @@ import socket
 import math
 from datetime import datetime
 
-from stream_3d import visualize_arm, visualize_hand
-from angle_calculation import calculate_six_arm_angles
+from stream_3d import visualize_arm
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from csv_writer import (create_csv, 
     append_to_csv, 
@@ -35,11 +34,13 @@ from utilities import (convert_to_shoulder_coord,
 from common import (load_data_from_npz_file,
     get_oak_2_rs_matrix,
     load_config)
-from send_data_to_robot import send_udp_message
+from send_left_arm_hand_angles_to_robot import send_angles_to_robot_using_pid
 from landmarks_detectors import LandmarksDetectors
 from landmarks_fuser import LandmarksFuser
 from landmarks_noise_reducer import LandmarksNoiseReducer
 from angle_noise_reducer import AngleNoiseReducer
+from left_arm_angle_calculator import LeftArmAngleCalculator
+from left_hand_angle_calculator import LeftHandAngleCalculator
 
 # ------------------- READ CONFIG ------------------- 
 config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml") 
@@ -75,14 +76,11 @@ enable_landmarks_noise_reducer = reduce_noise_config["landmarks_noise_reducer"][
 landmarks_noise_statistical_file = reduce_noise_config["landmarks_noise_reducer"]["statistical_file"]
 enable_angles_noise_reducer = reduce_noise_config["angles_noise_reducer"]["enable"]
 angles_noise_statistical_file = reduce_noise_config["angles_noise_reducer"]["statistical_file"]
+angles_noise_reducer_dim = reduce_noise_config["angles_noise_reducer"]["dim"]
 
 draw_xyz = config["debugging_mode"]["draw_xyz"]
-debug_angle_j1 = config["debugging_mode"]["show_left_arm_angle_j1"]
-debug_angle_j2 = config["debugging_mode"]["show_left_arm_angle_j2"]
-debug_angle_j3 = config["debugging_mode"]["show_left_arm_angle_j3"]
-debug_angle_j4 = config["debugging_mode"]["show_left_arm_angle_j4"]
-debug_angle_j5 = config["debugging_mode"]["show_left_arm_angle_j5"]
-debug_angle_j6 = config["debugging_mode"]["show_left_arm_angle_j6"]
+draw_left_arm_coordinates = config["debugging_mode"]["show_left_arm"]
+draw_left_hand_coordinates = config["debugging_mode"]["show_left_hand"]
 ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
@@ -130,7 +128,7 @@ right_frame_getter_queue = queue.Queue()  # This queue directly gets RAW frame (
 
 arm_points_vis_queue = queue.Queue()  # This queue stores fused arm landmarks to visualize by open3d
 hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks to visualize by open3d 
-TARGET_ANGLES_QUEUE = queue.Queue()  # This queue stores target angles 
+TARGET_LEFT_ARM_HAND_ANGLES_QUEUE = queue.Queue()  # This queue stores target angles 
 
 landmarks_detectors = LandmarksDetectors(detection_model_selection_id, 
     detection_model_list, config["detection_phase"], draw_landmarks)
@@ -139,7 +137,10 @@ landmarks_fuser = LandmarksFuser(fusing_method_selection_id,
 if enable_landmarks_noise_reducer:
     landmarks_noise_reducer = LandmarksNoiseReducer(landmarks_noise_statistical_file)
 if enable_angles_noise_reducer:
-    angle_noise_reducer = AngleNoiseReducer(angles_noise_statistical_file=angles_noise_statistical_file)
+    angle_noise_reducer = AngleNoiseReducer(angles_noise_statistical_file=angles_noise_statistical_file, 
+        dim=angles_noise_reducer_dim)
+left_arm_angle_calculator = LeftArmAngleCalculator(num_chain=3, landmark_dictionary=arm_hand_fused_names)
+left_hand_angle_calculator = LeftHandAngleCalculator(num_chain=2, landmark_dictionary=arm_hand_fused_names)
 
 if __name__ == "__main__":
     if (save_landmarks or
@@ -178,27 +179,23 @@ if __name__ == "__main__":
     right_oak_thread.start()
 
     if send_udp:
-        send_data_thread = threading.Thread(target=send_udp_message, args=(TARGET_ANGLES_QUEUE,
-            True,), daemon=True)
-        send_data_thread.start()
+        send_left_arm_hand_data_thread = threading.Thread(target=send_angles_to_robot_using_pid, 
+            args=(TARGET_LEFT_ARM_HAND_ANGLES_QUEUE, True,), daemon=True)
+        send_left_arm_hand_data_thread.start()
 
     if plot_3d:
         vis_arm_thread = threading.Thread(target=visualize_arm,
             args=(arm_points_vis_queue, 
                 arm_hand_fused_names,
-                debug_angle_j1,
-                debug_angle_j2,
-                debug_angle_j3,
-                debug_angle_j4,
-                debug_angle_j5,
-                debug_angle_j6,
+                left_arm_angle_calculator,
+                left_hand_angle_calculator,
                 draw_xyz,
-                True,
+                draw_left_arm_coordinates,
+                draw_left_hand_coordinates,
                 joint_vector_color,
                 ref_vector_color,),
             daemon=True)
         vis_arm_thread.start()
-        #vis_hand_thread.start()
 
     timestamp = 0
     frame_count = 0
@@ -252,33 +249,53 @@ if __name__ == "__main__":
             if (arm_hand_XYZ_wrt_shoulder is not None and
                 xyz_origin is not None):
 
-                angles, rot_mats_wrt_origin, rot_mats_wrt_parent = calculate_six_arm_angles(arm_hand_XYZ_wrt_shoulder,
-                    xyz_origin,
-                    arm_hand_fused_names)
+                left_arm_result = left_arm_angle_calculator(arm_hand_XYZ_wrt_shoulder, 
+                    parent_coordinate=xyz_origin)
+                left_arm_angles = left_arm_result["left_arm"]["angles"]
+                left_arm_rot_mats_wrt_origin = left_arm_result["left_arm"]["rot_mats_wrt_origin"]
+                left_arm_rot_mats_wrt_parent = left_arm_result["left_arm"]["rot_mats_wrt_parent"]
+                last_coordinate_from_left_arm = left_arm_rot_mats_wrt_origin[-1]
+                left_hand_result = left_hand_angle_calculator(arm_hand_XYZ_wrt_shoulder, 
+                    parent_coordinate=last_coordinate_from_left_arm)
 
                 # Uncomment these two lines below to carefully test on real robot because joint4, joint5 and joint6 dont in a danger position when colliding.
                 #angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
                 #angles = np.array([0,0,0, angle_j4, angle_j5, angle_j6])
                 
                 if save_angles:
-                    raw_angles = [*angles]
+                    raw_left_arm_angles = [*left_arm_angles]
 
                 if enable_angles_noise_reducer:
-                    angles = np.array(angles)
-                    angles = angle_noise_reducer(angles)
+                    left_arm_angles = np.array(left_arm_angles)
+                    left_arm_angles = angle_noise_reducer(left_arm_angles)
 
                 if save_angles:
-                    smoothed_angles = [*angles]
+                    smoothed_left_arm_angles = [*left_arm_angles]
 
-                arm_angles = np.array(angles)
+                left_arm_angles_to_send = np.array(left_arm_angles)
+
+                left_hand_angles_to_send = []
+                for finger_name in left_hand_angle_calculator.fingers_name:
+                    finger_i_angles = left_hand_result[finger_name]["angles"].copy()
+
+                    # In robot, its finger joint 1 is our finger joint 2, and vice versa (EXCEPT FOR THUMB FINGER). 
+                    # So that, we need to swap these values.
+                    if finger_name != "THUMB":
+                        finger_i_angles[0], finger_i_angles[1] = finger_i_angles[1], finger_i_angles[0]
+
+                    left_hand_angles_to_send.extend(finger_i_angles)
+                left_hand_angles_to_send = np.array(left_hand_angles_to_send)
+
+                left_hand_arm_angles_to_send = np.concatenate([left_arm_angles_to_send, left_hand_angles_to_send])
 
                 if send_udp:
-                    TARGET_ANGLES_QUEUE.put((arm_angles, timestamp))
-                    if TARGET_ANGLES_QUEUE.qsize() > 1:
-                        TARGET_ANGLES_QUEUE.get()
+                    TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.put((left_hand_arm_angles_to_send, timestamp))
+                    if TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.qsize() > 1:
+                        TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.get()
 
                 if plot_3d: 
-                    arm_points_vis_queue.put((arm_hand_XYZ_wrt_shoulder, xyz_origin))
+                    lmks_and_angle_result = (arm_hand_XYZ_wrt_shoulder, xyz_origin, left_arm_result, left_hand_result)
+                    arm_points_vis_queue.put(lmks_and_angle_result)
                     if arm_points_vis_queue.qsize() > 1:
                         arm_points_vis_queue.get()
 
@@ -290,8 +307,8 @@ if __name__ == "__main__":
                     delta_fps = round(1000 / delta_t_ms, 1)
                     row_writed_to_file = [timestamp, 
                         delta_fps, 
-                        *raw_angles,
-                        *smoothed_angles]
+                        *raw_left_arm_angles,
+                        *smoothed_left_arm_angles]
                     append_to_csv(ARM_ANGLE_CSV_PATH, row_writed_to_file)
 
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
@@ -308,12 +325,12 @@ if __name__ == "__main__":
                         output_landmarks=output_landmarks)
                     append_to_csv(LANDMARK_CSV_PATH, input_row)
             
-                if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
-                    left_img_path = os.path.join(IMAGE_DIR, "left_{}.jpg".format(timestamp))
-                    right_img_path = os.path.join(IMAGE_DIR, "right_{}.jpg".format(timestamp))
-                    cv2.imwrite(left_img_path, left_image_to_save)
-                    cv2.imwrite(right_img_path, right_image_to_save)
-                    num_img_save += 1
+        if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
+            left_img_path = os.path.join(IMAGE_DIR, "left_{}.jpg".format(timestamp))
+            right_img_path = os.path.join(IMAGE_DIR, "right_{}.jpg".format(timestamp))
+            cv2.imwrite(left_img_path, left_image_to_save)
+            cv2.imwrite(right_img_path, right_image_to_save)
+            num_img_save += 1
 
         frame_count += 1
         elapsed_time = time.time() - start_time

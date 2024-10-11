@@ -8,26 +8,26 @@ import numpy as np
 import open3d as o3d
 import threading
 import time
-from angle_calculation import (calculate_six_arm_angles, 
-    rotation_matrix_for_elbow,
-    rotation_matrix_for_wrist)
+from scipy.spatial.transform import Rotation as R
 
 def visualize_arm(lmks_queue,
     landmark_dictionary, 
-    show_left_arm_j1=False,
-    show_left_arm_j2=False,
-    show_left_arm_j3=False,
-    show_left_arm_j4=False,
-    show_left_arm_j5=False,
-    show_left_arm_j6=False,
+    left_arm_angle_calculator=None,
+    left_hand_angle_calculator=None,
     draw_original_xyz=True,
-    visualize_with_hand=False,
+    draw_left_arm_coordinates=None,
+    draw_left_hand_coordinates=None,
     joint_vector_color=None,
     ref_vector_color=None):
+    """
+    TODO: Doc.
+    """
+
     x = np.array([[0, 0, 0],
                   [500, 0, 0],
                   [0, 500, 0],
                   [0, 0, 500]])
+    SCALE_FACTOR = 50
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(x)
 
@@ -49,24 +49,34 @@ def visualize_arm(lmks_queue,
     vis.add_geometry(pcd)
     vis.add_geometry(line_set)
     vis.add_geometry(bounding_box)
+
+    #landmark_dictionary = landmark_dictionary[5:]
     
-    # Main loop
     while True:
+        """
+        -> Coordinate of a FIRST JOINT in a `chain` always rotates about the z-axis
+            of a LAST JOINT  in a `previous chain`. Therefore, when plotting, we 
+            can see that they share the same z-axis.
+        -> Coordinate of a LAST JOINT in a `chain` always rotatees about the y-axis
+            of a PREVIOUS JOINT in a `same chain`. Therefore, when plotting, we 
+            can see that thay share the same y-axis.
+        """
         if not lmks_queue.empty():
-            pts, original_xyz = lmks_queue.get()  # pts.shape = (M, N), M = #vectors = 21, N = #features = 3. original_xyz.shape = (N, O), N = #features = 3, O = #vectors = 3 (xyz)
-            if visualize_with_hand:
-                lines = [[0, 1], [1, 5], [0, 2], [0, 3], [2, 4], 
-                    [3, 4], [5, 6], [5, 10], [14, 18], [18, 22], 
-                    [10, 14], [5, 22], [6, 7], [7, 8], [8, 9], 
-                    [10, 11], [11, 12], [12, 13], [14, 15], [15, 16], 
-                    [16, 17], [18, 19], [19, 20], [20, 21], [22, 23], 
-                    [23, 24], [24, 25]]
-            else:
-                # For now, we dont get wrist, pinky, index and thumb landmark from POSE LANDMARKS DETECTION => We are not
-                # able to draw without HAND DETECTION
-                lines = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 5], [3, 4],
-                    [0, 6], [0, 7],
-                    [6, 8], [7, 8]]
+            pts, original_xyz, left_arm_result, left_hand_result = lmks_queue.get()  # pts.shape = (M, N), M = #vectors = 21, N = #features = 3. original_xyz.shape = (N, O), N = #features = 3, O = #vectors = 3 (xyz)
+            lines = [[0, 1], [1, 5], [0, 2], [0, 3], [2, 4], 
+                [3, 4], [5, 6], [5, 10], [14, 18], [18, 22], 
+                [10, 14], [5, 22], [6, 7], [7, 8], [8, 9], 
+                [10, 11], [11, 12], [12, 13], [14, 15], [15, 16], 
+                [16, 17], [18, 19], [19, 20], [20, 21], [22, 23], 
+                [23, 24], [24, 25]]
+
+            # Only show hand
+            #pts = pts[5:]
+            #lines = [[0, 1], [0, 5], [9, 13], [13, 17],
+                #[5, 9], [0, 17], [1, 2], [2, 3], [3, 4],
+                #[5, 6], [6, 7], [7, 8], [9, 10], [10, 11],
+                #[11, 12], [13, 14], [14, 15], [15, 16], [17, 18],
+                #[18, 19], [19, 20]]
 
             colors = [[0, 0, 0] for i in range(len(lines))]
 
@@ -78,95 +88,110 @@ def visualize_arm(lmks_queue,
                 lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
                 colors.extend([(1, 0, 0), (0, 1, 0), (0, 0, 1)])
 
-            angles, rot_mats_wrt_origin, rot_mats_wrt_parent = calculate_six_arm_angles(pts,
-                original_xyz,
-                landmark_dictionary)
-            angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
-            j1_rm, j2_rm, j3_rm, j4_rm, j5_rm, j6_rm = rot_mats_wrt_origin
+            left_arm_angles = left_arm_result["left_arm"]["angles"]
+            left_arm_rot_mats_wrt_origin = left_arm_result["left_arm"]["rot_mats_wrt_origin"]
+            parent_coordinate = original_xyz
 
-            if show_left_arm_j1:
-                x_j1, y_j1, z_j1 = j1_rm[:, 0],  j1_rm[:, 1], j1_rm[:, 2]
-                pts = np.concatenate([pts, [x_j1 * 40, y_j1 * 40, z_j1 * 40]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
-                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                print("Angle j1: ", angle_j1)
+            for landmark_idx, landmark_name in enumerate(left_arm_angle_calculator.landmarks_name):
+                for angle_idx_in_chain in range(left_arm_angle_calculator.num_angles_each_chain):
+                    if landmark_name in ["shoulder", "elbow"]:
+                        landmark_name_in_dictionary = f"left {landmark_name}"
+                    else:
+                        landmark_name_in_dictionary = landmark_name
+                    joint_idx = landmark_idx * left_arm_angle_calculator.num_angles_each_chain + angle_idx_in_chain
+                    ji_idx = landmark_dictionary.index(landmark_name_in_dictionary)
+                    ji_landmark = pts[ji_idx].copy()
 
-            if show_left_arm_j2:
-                x_j2, y_j2, z_j2 = j2_rm[:, 0],  j2_rm[:, 1], j2_rm[:, 2]
-                pts = np.concatenate([pts, [x_j2 * 40, y_j2 * 40, z_j2 * 40]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
-                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                print("Angle j2: ", angle_j2)
+                    left_arm_angles_ji = left_arm_angles[joint_idx]
+                    left_arm_ji_rot_mat_wrt_origin = left_arm_rot_mats_wrt_origin[joint_idx]
 
-            if show_left_arm_j3:
-                # Uncomment these lines to plot joint2_prime_wrt_o (align with joint3 and joint4)
-                #j2_p_rm = j2_rm @ rotation_matrix_for_elbow
-                #x_j2_p_rm, y_j2_p_rm, z_j2_p_rm = j2_p_rm[:, 0], j2_p_rm[:, 1], j2_p_rm[:, 2]
-                #pts = np.concatenate([pts, [x_j2_p_rm * 40, y_j2_p_rm * 40, z_j2_p_rm * 40]], axis=0)
-                #last_index = pts.shape[0] - 1
-                #lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
-                #colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                    left_arm_x_ji = left_arm_ji_rot_mat_wrt_origin[:, 0] * SCALE_FACTOR + ji_landmark
+                    left_arm_y_ji = left_arm_ji_rot_mat_wrt_origin[:, 1] * SCALE_FACTOR + ji_landmark
+                    left_arm_z_ji = left_arm_ji_rot_mat_wrt_origin[:, 2] * SCALE_FACTOR + ji_landmark
+                    
+                    if angle_idx_in_chain == 0:
+                        parent_coordinate_prime = parent_coordinate @ left_arm_angle_calculator.rot_mat_to_rearrange_container[landmark_idx] 
+                        left_arm_x_ji_parent = parent_coordinate_prime[:, 0] * SCALE_FACTOR + ji_landmark 
+                        left_arm_y_ji_parent = parent_coordinate_prime[:, 1] * SCALE_FACTOR + ji_landmark 
+                        left_arm_z_ji_parent = parent_coordinate_prime[:, 2] * SCALE_FACTOR + ji_landmark 
 
-                x_j3, y_j3, z_j3 = j3_rm[:, 0],  j3_rm[:, 1], j3_rm[:, 2]
-                pts = np.concatenate([pts, [x_j3 * 40, y_j3 * 40, z_j3 * 40]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
-                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                print("Angle j3: ", angle_j3)
+                    if angle_idx_in_chain == left_arm_angle_calculator.num_angles_each_chain - 1:
+                        parent_coordinate = left_arm_ji_rot_mat_wrt_origin 
 
-            if show_left_arm_j4:
-                x_j4, y_j4, z_j4 = j4_rm[:, 0],  j4_rm[:, 1], j4_rm[:, 2]
-                pts = np.concatenate([pts, [x_j4 * 40, y_j4 * 40, z_j4 * 40]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[0, last_index - 2], [0, last_index - 1], [0, last_index]])
-                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                print("Angle j4: ", angle_j4)
+                    if draw_left_arm_coordinates[f"show_left_arm_joint{joint_idx+1}"]:
+                        pts = np.concatenate([pts, [left_arm_x_ji, left_arm_y_ji, left_arm_z_ji]], axis=0)
+                        last_index = pts.shape[0] - 1
+                        lines.extend([[ji_idx, last_index - 2], [ji_idx, last_index - 1], [ji_idx, last_index]])
+                        colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-            if show_left_arm_j5:
-                wrist_idx = landmark_dictionary.index("WRIST")
-                wrist_landmark = pts[wrist_idx].copy()
-                # Uncomment these lines to plot joint4_prime_wrt_o (align with joint5 and joint6)
-                #j4_p_rm = j4_rm @ rotation_matrix_for_wrist 
-                #x_j4_p_rm, y_j4_p_rm, z_j4_p_rm = j4_p_rm[:, 0], j4_p_rm[:, 1], j4_p_rm[:, 2]
-                #x_j4_p_rm = x_j4_p_rm * 40 + wrist_landmark
-                #y_j4_p_rm = y_j4_p_rm * 40 + wrist_landmark
-                #z_j4_p_rm = z_j4_p_rm * 40 + wrist_landmark
+                        if (draw_left_arm_coordinates["show_parent_coordinate"] and
+                            angle_idx_in_chain == 0):
+                            draw_left_arm_coordinates[f"show_left_arm_joint{joint_idx+2}"] = False
+                            pts = np.concatenate([pts, [left_arm_x_ji_parent, left_arm_y_ji_parent, left_arm_z_ji_parent]], axis=0)
+                            last_index = pts.shape[0] - 1
+                            lines.extend([[ji_idx, last_index - 2], [ji_idx, last_index - 1], [ji_idx, last_index]])
+                            colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-                #pts = np.concatenate([pts, [x_j4_p_rm, y_j4_p_rm, z_j4_p_rm]], axis=0)
-                #last_index = pts.shape[0] - 1
-                #lines.extend([[wrist_idx, last_index - 2], [wrist_idx, last_index - 1], [wrist_idx, last_index]])
-                #colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                        print("----------------")
+                        print(f"Angle j{joint_idx+1}: {round(left_arm_angles_ji)}")
 
-                x_j5, y_j5, z_j5 = j5_rm[:, 0], j5_rm[:, 1], j5_rm[:, 2]
-                x_j5 = x_j5 * 40 + wrist_landmark
-                y_j5 = y_j5 * 40 + wrist_landmark 
-                z_j5 = z_j5 * 40 + wrist_landmark 
+            for finger_idx, finger_name in enumerate(left_hand_angle_calculator.fingers_name):
+                parent_coordinate = left_arm_rot_mats_wrt_origin[-1]
+                left_finger_angle_calculator = left_hand_angle_calculator.fingers_calculator[finger_idx]
+                left_finger_angles = left_hand_result[finger_name]["angles"]
+                left_finger_rot_mats_wrt_origin = left_hand_result[finger_name]["rot_mats_wrt_origin"]
 
-                pts = np.concatenate([pts, [x_j5, y_j5, z_j5]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[wrist_idx, last_index - 2], [wrist_idx, last_index - 1], [wrist_idx, last_index]])
-                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                print("Angle j5: ", angle_j5)
+                for landmark_idx, landmark_name in enumerate(left_finger_angle_calculator.landmarks_name):
+                    for angle_idx_in_chain in range(left_finger_angle_calculator.num_angles_each_chain):
+                        if finger_name in ["INDEX", "MIDDLE", "RING"]:
+                            landmark_name_in_dictionary = f"{finger_name}_FINGER_{landmark_name}"
+                        else:
+                            landmark_name_in_dictionary = f"{finger_name}_{landmark_name}"
 
-            if show_left_arm_j6:
-                wrist_idx = landmark_dictionary.index("WRIST")
-                wrist_landmark = pts[wrist_idx].copy()
-                x_j6, y_j6, z_j6 = j6_rm[:, 0], j6_rm[:, 1], j6_rm[:, 2]
-                x_j6 = x_j6 * 40 + wrist_landmark
-                y_j6 = y_j6 * 40 + wrist_landmark 
-                z_j6 = z_j6 * 40 + wrist_landmark 
+                        joint_idx = landmark_idx * left_finger_angle_calculator.num_angles_each_chain + angle_idx_in_chain
+                        ji_idx = landmark_dictionary.index(landmark_name_in_dictionary)
+                        ji_landmark = pts[ji_idx].copy()
 
-                pts = np.concatenate([pts, [x_j6, y_j6, z_j6]], axis=0)
-                last_index = pts.shape[0] - 1
-                lines.extend([[wrist_idx, last_index - 2], [wrist_idx, last_index - 1], [wrist_idx, last_index]])
-                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-                print("Angle j6: ", angle_j6)
+                        if (angle_idx_in_chain == left_finger_angle_calculator.num_angles_each_chain - 1 and
+                            not left_finger_angle_calculator.calculate_second_angle_flag_container[landmark_idx]):
+                            break
+
+                        left_finger_angles_ji = left_finger_angles[joint_idx]
+                        left_finger_ji_rot_mat_wrt_orgin = left_finger_rot_mats_wrt_origin[joint_idx]
+
+                        left_finger_x_ji = left_finger_ji_rot_mat_wrt_orgin[:, 0] * SCALE_FACTOR + ji_landmark
+                        left_finger_y_ji = left_finger_ji_rot_mat_wrt_orgin[:, 1] * SCALE_FACTOR + ji_landmark
+                        left_finger_z_ji = left_finger_ji_rot_mat_wrt_orgin[:, 2] * SCALE_FACTOR + ji_landmark
+
+                        if angle_idx_in_chain == 0:
+                            parent_coordinate_prime = parent_coordinate @ left_finger_angle_calculator.rot_mat_to_rearrange_container[landmark_idx]
+                            left_finger_x_ji_parent = parent_coordinate_prime[:, 0] * SCALE_FACTOR + ji_landmark
+                            left_finger_y_ji_parent = parent_coordinate_prime[:, 1] * SCALE_FACTOR + ji_landmark
+                            left_finger_z_ji_parent = parent_coordinate_prime[:, 2] * SCALE_FACTOR + ji_landmark
+
+                        if angle_idx_in_chain == left_finger_angle_calculator.num_angles_each_chain - 1:
+                            parent_coordinate = left_finger_ji_rot_mat_wrt_orgin
+
+                        if draw_left_hand_coordinates[finger_name][f"show_left_finger_joint{joint_idx+1}"]:
+                            pts = np.concatenate([pts, [left_finger_x_ji, left_finger_y_ji, left_finger_z_ji]], axis=0)
+                            last_index = pts.shape[0] - 1
+                            lines.extend([[ji_idx, last_index - 2], [ji_idx, last_index - 1], [ji_idx, last_index]])
+                            colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+                            if (draw_left_hand_coordinates[finger_name]["show_parent_coordinate"] and
+                                angle_idx_in_chain == 0):
+                                draw_left_hand_coordinates[finger_name][f"show_left_finger_joint{joint_idx+2}"] = False
+                                pts = np.concatenate([pts, [left_finger_x_ji_parent, left_finger_y_ji_parent, left_finger_z_ji_parent]], axis=0)
+                                last_index = pts.shape[0] - 1
+                                lines.extend([[ji_idx, last_index - 2], [ji_idx, last_index - 1], [ji_idx, last_index]])
+                                colors.extend([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+                            print("----------------")
+                            print(f"Angle of {finger_name} j{joint_idx+1}: {round(left_finger_angles_ji)}")
 
             pcd.points = o3d.utility.Vector3dVector(pts)
-            line_set.points = o3d.utility.Vector3dVector(pts)  # Update the points
-            line_set.lines = o3d.utility.Vector2iVector(lines)  # Update the lines
+            line_set.points = o3d.utility.Vector3dVector(pts)  
+            line_set.lines = o3d.utility.Vector2iVector(lines)  
             line_set.colors = o3d.utility.Vector3dVector(colors)
 
             # Draw cuboid
@@ -187,7 +212,6 @@ def visualize_arm(lmks_queue,
             bbox_colors = [[0, 1, 0] for _ in range(len(edges))]  
             bounding_box.colors = o3d.utility.Vector3dVector(bbox_colors)
 
-            # Update the visualization
             vis.update_geometry(pcd)
             vis.update_geometry(line_set)
             vis.update_geometry(bounding_box)
@@ -195,52 +219,5 @@ def visualize_arm(lmks_queue,
         vis.update_renderer()        
 
         time.sleep(0.1)  # Set time sleep here is importance, the higher time.sleep parameter is (unit is second), the faster the main thread can process
-
-    vis.destroy_window()
-
-def visualize_hand(lmks_queue):
-    x = np.array([[0, 0, 0],
-                  [500, 0, 0],
-                  [0, 500, 0],
-                  [0, 0, 500]])
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(x)
-
-    lines = [[0, 1], [0, 2], [0, 3]]
-    colors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    line_set = o3d.geometry.LineSet(
-        points=o3d.utility.Vector3dVector(x),
-        lines=o3d.utility.Vector2iVector(lines)
-    )
-    line_set.colors = o3d.utility.Vector3dVector(colors)
-    
-    vis = o3d.visualization.Visualizer()
-    vis.create_window()
-    vis.add_geometry(pcd)
-    vis.add_geometry(line_set)
-    
-    # Main loop
-    while True:
-        if not lmks_queue.empty():
-            pts = lmks_queue.get()
-            lines = [[0, 1], [1, 2], [2, 3], [3, 4],
-                     [0, 5], [5, 6], [6, 7], [7, 8],
-                     [0, 9], [9, 10], [10, 11], [11, 12],
-                     [0, 13], [13, 14], [14, 15], [15, 16],
-                     [0, 17], [17, 18], [18, 19], [19, 20]]
-            colors = [[0, 0, 0] for i in range(len(lines))]
-
-            pcd.points = o3d.utility.Vector3dVector(pts)
-            line_set.points = o3d.utility.Vector3dVector(pts)  # Update the points
-            line_set.lines = o3d.utility.Vector2iVector(lines)  # Update the lines
-            line_set.colors = o3d.utility.Vector3dVector(colors)
-
-            # Update the visualization
-            vis.update_geometry(pcd)
-            vis.update_geometry(line_set)
-        vis.poll_events()
-        vis.update_renderer()        
-
-        time.sleep(0.1)
 
     vis.destroy_window()

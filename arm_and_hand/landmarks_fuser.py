@@ -8,7 +8,7 @@ from utilities import (fuse_landmarks_from_two_cameras,
     convert_to_shoulder_coord,
     flatten_two_camera_input)
 from landmarks_scaler import LandmarksScaler
-from csv_writer import columns_to_normalize
+from csv_writer import columns_to_normalize, fusion_csv_columns_name
 
 class LandmarksFuser:
     """
@@ -135,9 +135,20 @@ class LandmarksFuser:
                 right_2_left_matrix=right_2_left_matrix,
                 img_size=self._img_size,
                 mode="input")
-            input_row = np.array(input_row)  # shape: (144)
-            input_row = input_row[None, :]  # shape: (1, 144)
+            input_row = np.array(input_row)  # shape: (322)
+            input_row = input_row[None, :]  # shape: (1, 322)
             input_row = self._landmarks_scaler(input_row)
+
+            left_camera_first_intrinsic_value_idx = 144  
+            right_camera_first_lmk_value_idx = left_camera_first_intrinsic_value_idx + 9
+            right_camera_first_intrinsic_value_idx = right_camera_first_lmk_value_idx + 144
+            first_right_2_left_matrix_value_idx = right_camera_first_intrinsic_value_idx + 9
+
+            left_camera_lmks = input_row[:, :left_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
+            right_camera_lmks = input_row[:, right_camera_first_lmk_value_idx:right_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
+
+            input_row = np.concatenate([left_camera_lmks, right_camera_lmks], axis=1)
+
             input_row = torch.tensor(input_row, dtype=torch.float32)
             with torch.no_grad():
                 input_row = input_row.to("cuda")
