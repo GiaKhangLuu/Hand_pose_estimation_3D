@@ -8,7 +8,7 @@ from csv_writer import (create_csv,
     append_to_csv, 
     fusion_csv_columns_name, 
     split_train_test_val,
-    arm_angles_name)
+    left_arm_angles_name)
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #server_ip = "127.0.0.1"
@@ -161,7 +161,7 @@ def send_leftarm_angles_udp_message_using_lerp(target_angles_queue=None, degree=
     global global_timestamp
 
     if write_angle_to_file:
-        create_csv("/home/giakhang/Desktop/debug_lerp.csv", arm_angles_name)
+        create_csv("/home/giakhang/Desktop/debug_lerp.csv", left_arm_angles_name)
 
     global STD_LERP_BY_FPS
     start_time = time.time()
@@ -223,7 +223,7 @@ def send_leftarm_angles_udp_message_using_pid(target_angles_queue=None, degree=T
     global num_joint
 
     if write_angle_to_file:
-        create_csv("/home/giakhang/Desktop/debug_lerp.csv", arm_angles_name)
+        create_csv("/home/giakhang/Desktop/debug_lerp.csv", left_arm_angles_name)
 
     pid_manager = []
     for i in range(num_joint):

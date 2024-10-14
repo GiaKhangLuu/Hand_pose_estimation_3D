@@ -10,19 +10,19 @@ rotation_matrix_for_shoulder = np.eye(3)
 rotation_matrix_for_elbow = R.from_euler("xz", [90, -90], degrees=True).as_matrix()
 rotation_matrix_for_wrist = R.from_euler("y", -90, degrees=True).as_matrix()
 
-bound = 2
-joint1_min = -195 + bound
-joint1_max = 86 - bound
-joint2_min = -3 + bound
-joint2_max = 92 - bound
-joint3_min = -143 + bound
-joint3_max = 143 - bound
-joint4_min = -91 + bound
-joint4_max = 22 - bound
-joint5_min = -115 + bound
-joint5_max = 206 - bound
-joint6_min = -69 + bound
-joint6_max = 52 - bound
+STATIC_BOUND = 2
+joint1_min = -195 
+joint1_max = 86 
+joint2_min = -3 
+joint2_max = 92 
+joint3_min = -143 
+joint3_max = 143 
+joint4_min = -91 
+joint4_max = 22 
+joint5_min = -115 
+joint5_max = 206 
+joint6_min = -69 
+joint6_max = 52 
 
 class LeftArmAngleCalculator(ChainAngleCalculator):
     def __init__(self, num_chain, landmark_dictionary):
@@ -42,10 +42,15 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
             rotation_matrix_for_elbow,
             rotation_matrix_for_wrist
         ]
+        self._STATIC_BOUND = STATIC_BOUND
+        # Just use when minimum is negative and maximum is positive
         self._angle_range_of_two_joints_container = [
-            [[joint1_min, joint1_max], [joint2_min, joint2_max]],
-            [[joint3_min, joint3_max], [joint4_min, joint4_max]],
-            [[joint5_min, joint5_max], [joint6_min, joint6_max]]
+            [[joint1_min + self._STATIC_BOUND, joint1_max - self._STATIC_BOUND], 
+             [joint2_min + self._STATIC_BOUND, joint2_max - self._STATIC_BOUND]],
+            [[joint3_min + self._STATIC_BOUND, joint3_max - self._STATIC_BOUND], 
+             [joint4_min + self._STATIC_BOUND, joint4_max - self._STATIC_BOUND]],
+            [[joint5_min + self._STATIC_BOUND, joint5_max - self._STATIC_BOUND], 
+             [joint6_min + self._STATIC_BOUND, joint6_max - self._STATIC_BOUND]]
         ]
         self._axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints_container = [
             ["y", None],

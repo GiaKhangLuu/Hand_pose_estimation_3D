@@ -27,7 +27,8 @@ from csv_writer import (create_csv,
     append_to_csv, 
     fusion_csv_columns_name, 
     split_train_test_val,
-    arm_angles_name)
+    left_arm_angles_name,
+    left_hand_angles_name)
 from utilities import (convert_to_shoulder_coord,
     convert_to_wrist_coord,
     flatten_two_camera_input)
@@ -60,8 +61,9 @@ send_udp = config["send_udp"]
 plot_3d = config["utilities"]["plot_3d"]
 draw_landmarks = config["utilities"]["draw_landmarks"]
 save_landmarks = config["utilities"]["save_landmarks"]
-save_angles = config["utilities"]["save_angles"]
 save_images = config["utilities"]["save_images"]
+save_left_arm_angles = config["utilities"]["save_left_arm_angles"]
+save_left_hand_angles = config["utilities"]["save_left_hand_angles"]
 
 detection_model_selection_id = config["detection_phase"]["model_selection_id"]
 detection_model_list = tuple(config["detection_phase"]["model_list"])
@@ -144,7 +146,8 @@ left_hand_angle_calculator = LeftHandAngleCalculator(num_chain=2, landmark_dicti
 
 if __name__ == "__main__":
     if (save_landmarks or
-        save_angles or
+        save_left_arm_angles or
+        save_left_hand_angles or
         save_images):
         current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
         current_date = datetime.now().strftime('%Y-%m-%d')
@@ -162,10 +165,13 @@ if __name__ == "__main__":
             IMAGE_DIR = os.path.join(DATA_DIR, "image") 
             os.mkdir(IMAGE_DIR)
 
-        if save_angles:
-            current_frame_time = time.time()
-            ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "arm_angle_{}.csv".format(current_time))
-            create_csv(ARM_ANGLE_CSV_PATH, arm_angles_name)
+        if save_left_arm_angles:
+            LEFT_ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_arm_angle_{}.csv".format(current_time))
+            create_csv(LEFT_ARM_ANGLE_CSV_PATH, left_arm_angles_name)
+            
+        if save_left_hand_angles:
+            LEFT_HAND_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_hand_angle_{}.csv".format(current_time))
+            create_csv(LEFT_HAND_ANGLE_CSV_PATH, left_hand_angles_name)
 
     pipeline_left_oak = initialize_oak_cam()
     pipeline_right_oak = initialize_oak_cam()
@@ -205,6 +211,7 @@ if __name__ == "__main__":
 
     while True:
         left_camera_body_landmarks_xyZ, right_camera_body_landmarks_xyZ = None, None
+        succeed_in_fusing_landmarks = False
         # Get and preprocess rgb and its depth
         left_rgb, left_depth = left_frame_getter_queue.get()
         right_rgb, right_depth = right_frame_getter_queue.get()
@@ -257,24 +264,25 @@ if __name__ == "__main__":
                 last_coordinate_from_left_arm = left_arm_rot_mats_wrt_origin[-1]
                 left_hand_result = left_hand_angle_calculator(arm_hand_XYZ_wrt_shoulder, 
                     parent_coordinate=last_coordinate_from_left_arm)
+                succeed_in_fusing_landmarks = True
 
                 # Uncomment these two lines below to carefully test on real robot because joint4, joint5 and joint6 dont in a danger position when colliding.
                 #angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
                 #angles = np.array([0,0,0, angle_j4, angle_j5, angle_j6])
                 
-                if save_angles:
+                if save_left_arm_angles:
                     raw_left_arm_angles = [*left_arm_angles]
-
+                    
                 if enable_angles_noise_reducer:
                     left_arm_angles = np.array(left_arm_angles)
                     left_arm_angles = angle_noise_reducer(left_arm_angles)
 
-                if save_angles:
+                if save_left_arm_angles:
                     smoothed_left_arm_angles = [*left_arm_angles]
 
                 left_arm_angles_to_send = np.array(left_arm_angles)
 
-                left_hand_angles_to_send = []
+                left_hand_angles = []
                 for finger_name in left_hand_angle_calculator.fingers_name:
                     finger_i_angles = left_hand_result[finger_name]["angles"].copy()
 
@@ -283,9 +291,17 @@ if __name__ == "__main__":
                     if finger_name != "THUMB":
                         finger_i_angles[0], finger_i_angles[1] = finger_i_angles[1], finger_i_angles[0]
 
-                    left_hand_angles_to_send.extend(finger_i_angles)
-                left_hand_angles_to_send = np.array(left_hand_angles_to_send)
-
+                    left_hand_angles.extend(finger_i_angles)
+                
+                if save_left_hand_angles:
+                    raw_left_hand_angles = [*left_hand_angles]     
+                
+                # TODO: Applying reducer for left hand angles
+                    
+                if save_left_hand_angles:
+                    smoothed_left_hand_angles = [*left_hand_angles]
+                
+                left_hand_angles_to_send = np.array(left_hand_angles)
                 left_hand_arm_angles_to_send = np.concatenate([left_arm_angles_to_send, left_hand_angles_to_send])
 
                 if send_udp:
@@ -298,18 +314,6 @@ if __name__ == "__main__":
                     arm_points_vis_queue.put(lmks_and_angle_result)
                     if arm_points_vis_queue.qsize() > 1:
                         arm_points_vis_queue.get()
-
-                if save_angles:
-                    next_frame_time = time.time()
-                    delta_t = round(next_frame_time - current_frame_time, 3)
-                    delta_t_ms = delta_t * 1000
-                    current_frame_time = next_frame_time
-                    delta_fps = round(1000 / delta_t_ms, 1)
-                    row_writed_to_file = [timestamp, 
-                        delta_fps, 
-                        *raw_left_arm_angles,
-                        *smoothed_left_arm_angles]
-                    append_to_csv(ARM_ANGLE_CSV_PATH, row_writed_to_file)
 
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
                     output_landmarks = np.concatenate([arm_hand_fused_XYZ, 
@@ -340,19 +344,32 @@ if __name__ == "__main__":
             frame_count = 0
             start_time = time.time()
 
-        timestamp += 1
-
         frame_of_two_cam = np.vstack([left_rgb, right_rgb])
         frame_of_two_cam = cv2.resize(frame_of_two_cam, (640, 720))
         cv2.putText(frame_of_two_cam, f'FPS: {fps:.2f}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-        #rightside_rgb = cv2.resize(rightside_rgb, (960, 540))
-        #cv2.putText(rightside_rgb, f'FPS: {fps:.2f}', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 0), 4, cv2.LINE_AA)
 
         cv2.imshow("Frame", frame_of_two_cam)
+        
+        if save_left_arm_angles and succeed_in_fusing_landmarks:
+            row_left_arm_angles_writed_to_file = [timestamp, 
+                                                  round(fps, 1), 
+                                                  *raw_left_arm_angles,
+                                                  *smoothed_left_arm_angles]
+            append_to_csv(LEFT_ARM_ANGLE_CSV_PATH, row_left_arm_angles_writed_to_file)
+                    
+        if save_left_hand_angles and succeed_in_fusing_landmarks:
+            row_left_hand_angles_writed_to_file = [timestamp,
+                                                   round(fps, 1),
+                                                   *raw_left_hand_angles,
+                                                   *smoothed_left_hand_angles] 
+            append_to_csv(LEFT_HAND_ANGLE_CSV_PATH, row_left_hand_angles_writed_to_file)
+
+        timestamp += 1
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             cv2.destroyAllWindows()
             break
+        
     if save_landmarks:
         split_train_test_val(LANDMARK_CSV_PATH)
     if save_images and num_img_save == 0:

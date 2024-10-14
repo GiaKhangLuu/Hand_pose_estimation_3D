@@ -43,7 +43,7 @@ Which:
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from chain_angle_calculator import ChainAngleCalculator
+from left_finger_angle_calculator import LeftFingerAngleCalculator
 
 mcp_vector_in_init_frame = None
 ip_vector_in_init_frame = None
@@ -51,15 +51,15 @@ ip_vector_in_init_frame = None
 rot_mat_to_rearrange_finger_coord = np.eye(3)
 rot_mat_for_ip = R.from_euler("x", 90, degrees=True).as_matrix()
 
-bound = 2
-joint1_min = -74 + bound
-joint1_max = 45 - bound
-joint2_min = -90 + bound
-joint2_max = 0 - bound
-joint3_min = -90 + bound
-joint3_max = 0 - bound
+STATIC_BOUND = 1
+joint1_min = -74 
+joint1_max = 45 
+joint2_min = -90 
+joint2_max = 0 
+joint3_min = -90 
+joint3_max = 0 
 
-class LeftThumbFingerAngleCalculator(ChainAngleCalculator):
+class LeftThumbFingerAngleCalculator(LeftFingerAngleCalculator):
     def __init__(
         self,
         num_chain,
@@ -71,8 +71,15 @@ class LeftThumbFingerAngleCalculator(ChainAngleCalculator):
         """
         TODO: Doc.
         """
+        
+        super().__init__(
+            num_chain=num_chain, 
+            finger_name=finger_name,
+            landmark_dictionary=landmark_dictionary,
+            last_coord_of_robot_to_home_position_of_finger_quat=last_coord_of_robot_to_home_position_of_finger_quat,
+            last_coord_of_real_person_to_last_coord_of_robot_in_rviz_rot_mat=last_coord_of_real_person_to_last_coord_of_robot_in_rviz_rot_mat
+        )
 
-        self.finger_name = finger_name
         self.landmarks_name = ["MCP", "IP"]
         self._mapping_to_robot_angle_func_container = [
             (self._joint1_angle_to_TomOSPC_angle, self._joint2_angle_to_TomOSPC_angle), 
@@ -82,37 +89,21 @@ class LeftThumbFingerAngleCalculator(ChainAngleCalculator):
             mcp_vector_in_init_frame,
             ip_vector_in_init_frame
         ]
+        self._STATIC_BOUND = STATIC_BOUND
+        # Just use when minimun is negative and maximum is positive
         self._angle_range_of_two_joints_container = [
-            [[joint1_min, joint1_max], [joint2_min, joint2_max]],
-            [[joint3_min, joint3_max], [None, None]],
-        ]
-        self._axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints_container = [
-            [None, None],
-            [None, None]
-        ]
-        self._get_the_opposite_of_two_joints_flag_container = [
-            [False, False],
-            [False, False] 
-        ]
-        self._limit_angle_of_two_joints_flag_container = [
-            [False, False],
-            [False, False]
-        ]
-        self.calculate_second_angle_flag_container = [True, False]
-        self._clip_angle_of_two_joints_flag_container = [
-            [True, True],
-            [True, True]
+            [[joint1_min + self._STATIC_BOUND, joint1_max - self._STATIC_BOUND], 
+             [joint2_min + self._STATIC_BOUND, joint2_max - self._STATIC_BOUND]],
+            [[joint3_min + self._STATIC_BOUND, joint3_max - self._STATIC_BOUND], 
+             [None, None]],
         ]
 
-        self._last_coord_of_real_person_to_last_coord_in_rviz_rot_mat = last_coord_of_real_person_to_last_coord_of_robot_in_rviz_rot_mat
-        self._last_coord_of_robot_to_home_position_of_finger_rot_mat = R.from_quat(
-            last_coord_of_robot_to_home_position_of_finger_quat).as_matrix()
         rot_mat_for_mcp = (self._last_coord_of_real_person_to_last_coord_in_rviz_rot_mat @ 
             self._last_coord_of_robot_to_home_position_of_finger_rot_mat @
             rot_mat_to_rearrange_finger_coord)
         self.rot_mat_to_rearrange_container = [rot_mat_for_mcp, rot_mat_for_ip]
-
-        super().__init__(num_chain, landmark_dictionary)
+        
+        self._apply_dynamic_bound = False
 
     def _joint1_angle_to_TomOSPC_angle(self, joint1_angle):
         """
@@ -156,44 +147,3 @@ class LeftThumbFingerAngleCalculator(ChainAngleCalculator):
         next_landmark_vec_wrt_origin = XYZ_landmarks[next_landmark_idx].copy()
         landmark_vec = next_landmark_vec_wrt_origin - landmark_vec_wrt_origin 
         return landmark_vec
-
-    def __call__(self, XYZ_landmarks, parent_coordinate):
-        merged_result_dict = dict()
-        chain_result_dict = self._calculate_chain_angles(XYZ_landmarks, parent_coordinate)
-        finger_angles = []
-        finger_rot_mats_wrt_origin = []
-        finger_rot_mats_wrt_parent = [] 
-
-        for chain_idx in range(self.num_chain):
-            chain_result = chain_result_dict[f"chain_{chain_idx+1}"]
-
-            older_brother_angle = chain_result["older_brother_angle"]
-            older_brother_rot_mat_wrt_origin = chain_result["older_brother_rot_mat_wrt_origin"]
-            older_brother_rot_mat_wrt_parent = chain_result["older_brother_rot_mat_wrt_parent"]
-            younger_brother_angle = chain_result["younger_brother_angle"]
-            younger_brother_rot_mat_wrt_origin = chain_result["younger_brother_rot_mat_wrt_origin"]
-            younger_brother_rot_mat_wrt_older_brother = chain_result["younger_brother_rot_mat_wrt_older_brother"]
-            vector_in_current_frame = chain_result["vector_in_current_frame"].copy()
-
-            self._update_vector_in_previous_frame(chain_idx, vector_in_current_frame)
-
-            if self.calculate_second_angle_flag_container[chain_idx]:
-                extended_angles = [older_brother_angle, younger_brother_angle]
-                extended_rot_mats_wrt_origin = [older_brother_rot_mat_wrt_origin, younger_brother_rot_mat_wrt_origin]
-                extended_rot_mats_wrt_parent = [older_brother_rot_mat_wrt_parent, younger_brother_rot_mat_wrt_older_brother]
-            else:
-                extended_angles = [older_brother_angle]
-                extended_rot_mats_wrt_origin = [older_brother_rot_mat_wrt_origin]
-                extended_rot_mats_wrt_parent = [older_brother_rot_mat_wrt_parent]
-
-            finger_angles.extend(extended_angles)
-            finger_rot_mats_wrt_origin.extend(extended_rot_mats_wrt_origin)
-            finger_rot_mats_wrt_parent.extend(extended_rot_mats_wrt_parent)
-
-        merged_result_dict[self.finger_name] = {
-            "angles": finger_angles,
-            "rot_mats_wrt_origin": finger_rot_mats_wrt_origin,
-            "rot_mats_wrt_parent": finger_rot_mats_wrt_parent
-        }
-
-        return merged_result_dict

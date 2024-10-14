@@ -82,7 +82,7 @@ detection_phase:
         - right foot index
   mmpose:
     convert_color_channel: false
-    landmark_thresh: 0.6
+    landmark_thresh: 0.7
     person_detection:
       is_enable: true
       person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
@@ -101,9 +101,9 @@ detection_phase:
       #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_right_cam_best_epoch480_weight.pth
       # ---- RTMPOSE-M ----
       left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241010_left_cam_epoch300_weight.pth
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241011_left_cam_best_epoch60_weight.pth
       right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241010_right_cam_epoch300_weight.pth
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241011_right_cam_best_epoch280_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -189,9 +189,10 @@ process_frame:
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_angles: false
-  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: true
+  save_left_arm_angles: true
+  save_left_hand_angles: true
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: false
 
 debugging_mode:
   draw_xyz: false
@@ -205,10 +206,10 @@ debugging_mode:
     show_left_arm_joint6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
   show_left_hand:
     THUMB:
-      show_parent_coordinate: true
+      show_parent_coordinate: false
       show_left_finger_joint1: false 
       show_left_finger_joint2: false 
-      show_left_finger_joint3: true 
+      show_left_finger_joint3: false 
     INDEX:
       show_parent_coordinate: false
       show_left_finger_joint1: false

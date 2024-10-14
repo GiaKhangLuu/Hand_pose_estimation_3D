@@ -4,11 +4,6 @@ import numpy as np
 import time
 
 from angle_pid import AnglePID
-from csv_writer import (create_csv, 
-    append_to_csv, 
-    fusion_csv_columns_name, 
-    split_train_test_val,
-    arm_angles_name)
 from send_leftarm_data_to_robot import max_velocity_each_joint as max_velocity_of_arm_joints
 from send_leftarm_data_to_robot import max_acce_each_joint as max_acce_of_arm_joints
 from send_leftarm_data_to_robot import joints_pid_config as arm_joints_pid_config

@@ -8,7 +8,7 @@ from csv_writer import (create_csv,
     append_to_csv, 
     fusion_csv_columns_name, 
     split_train_test_val,
-    arm_angles_name)
+    left_arm_angles_name)
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #server_ip = "127.0.0.1"

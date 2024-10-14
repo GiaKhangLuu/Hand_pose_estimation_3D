@@ -51,13 +51,13 @@ pip_vector_in_init_frame = None
 rot_mat_to_rearrange_finger_coord = R.from_euler("x", 90, degrees=True).as_matrix()
 rot_mat_for_pip = np.eye(3)
 
-bound = 2
-joint1_min = -90 + bound
-joint1_max = 0 - bound
-joint2_min = -22 + bound
-joint2_max = 22 - bound
-joint3_min = -90 + bound
-joint3_max = 0 - bound
+STATIC_BOUND = 1
+joint1_min = -90
+joint1_max = 8
+joint2_min = -30
+joint2_max = 30
+joint3_min = -90
+joint3_max = 8
 
 class LeftFingerAngleCalculator(ChainAngleCalculator):
     def __init__(
@@ -73,6 +73,7 @@ class LeftFingerAngleCalculator(ChainAngleCalculator):
         """
         self.finger_name = finger_name
         self.landmarks_name = ["MCP", "PIP"]
+        self._STATIC_BOUND = STATIC_BOUND
         self._mapping_to_robot_angle_func_container = [
             (self._joint1_angle_to_TomOSPC_angle, self._joint2_angle_to_TomOSPC_angle), 
             (self._joint3_angle_to_TomOSPC_angle, None)
@@ -81,9 +82,12 @@ class LeftFingerAngleCalculator(ChainAngleCalculator):
             mcp_vector_in_init_frame,
             pip_vector_in_init_frame
         ]
+        # Just use when minimum is negative and maximum is positive
         self._angle_range_of_two_joints_container = [
-            [[joint1_min, joint1_max], [joint2_min, joint2_max]],
-            [[joint3_min, joint3_max], [None, None]],
+            [[joint1_min + self._STATIC_BOUND, joint1_max - self._STATIC_BOUND], 
+             [joint2_min + self._STATIC_BOUND, joint2_max - self._STATIC_BOUND]],
+            [[joint3_min + self._STATIC_BOUND, joint3_max - self._STATIC_BOUND], 
+             [None, None]],
         ]
         self._axis_to_get_the_opposite_if_angle_exceed_the_limit_of_two_joints_container = [
             [None, None],
@@ -110,7 +114,13 @@ class LeftFingerAngleCalculator(ChainAngleCalculator):
             self._last_coord_of_robot_to_home_position_of_finger_rot_mat @
             rot_mat_to_rearrange_finger_coord)
         self.rot_mat_to_rearrange_container = [rot_mat_for_mcp, rot_mat_for_pip]
-
+        
+        self._apply_dynamic_bound = True
+        # Open RVIZ to get these values
+        self._mcp_joint_1_angle_checkpoint = [joint1_max, -40, -48]
+        self._mcp_max_joint_2_angle_adapted_for_joint_1 = [joint2_max, 28, 25]
+        assert len(self._mcp_joint_1_angle_checkpoint) == len(self._mcp_max_joint_2_angle_adapted_for_joint_1)
+        
         super().__init__(num_chain, landmark_dictionary)
 
     def _get_landmark_vector(self, chain_idx, XYZ_landmarks):
@@ -125,6 +135,24 @@ class LeftFingerAngleCalculator(ChainAngleCalculator):
         next_landmark_vec_wrt_origin = XYZ_landmarks[next_landmark_idx].copy()
         landmark_vec = next_landmark_vec_wrt_origin - landmark_vec_wrt_origin 
         return landmark_vec
+    
+    def _calculate_dynamic_limit_max(self, mcp_joint_1_angle):
+        """
+        Due to the mechanic design of TomO's hands, each finger mcp's joint 2
+        has a different collision value which depends on the value of joint 1. 
+        The more finger mcp's joint 1 moves up, the less space joint 2 is 
+        able to move horizontally.
+        Note that in the scope of this source code, finger mcp's joint 2 is the 
+        finger mcp's joint 1 of the real robot and finger mcp's joint 1 is the
+        finger mcp's joint 2 of the real robot. 
+        """
+        
+        # np.interp needs to use increasing list, but our angle is in 
+        # decreasing format => have to reverse them  
+        dynamic_limit_max = np.interp(mcp_joint_1_angle, 
+                                      self._mcp_joint_1_angle_checkpoint[::-1],
+                                      self._mcp_max_joint_2_angle_adapted_for_joint_1[::-1])
+        return dynamic_limit_max
 
     def _joint1_angle_to_TomOSPC_angle(self, joint1_angle):
         """
@@ -178,6 +206,12 @@ class LeftFingerAngleCalculator(ChainAngleCalculator):
             vector_in_current_frame = chain_result["vector_in_current_frame"].copy()
 
             self._update_vector_in_previous_frame(chain_idx, vector_in_current_frame)
+            
+            if (self._apply_dynamic_bound and 
+                self.calculate_second_angle_flag_container[chain_idx] and
+                chain_idx == 0):
+                dynamic_limit_max = self._calculate_dynamic_limit_max(older_brother_angle)
+                younger_brother_angle = np.clip(younger_brother_angle, -dynamic_limit_max, dynamic_limit_max)                                                                       
 
             if self.calculate_second_angle_flag_container[chain_idx]:
                 extended_angles = [older_brother_angle, younger_brother_angle]
