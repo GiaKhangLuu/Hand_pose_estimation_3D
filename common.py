@@ -125,3 +125,27 @@ def get_xyZ(landmarks, frame_size, landmark_ids_to_get=None, visibility_threshol
         xyZ = np.concatenate([xy_unnorm, Z[:, None]], axis=-1)
         return xyZ
     return xyz_unnorm
+
+def scale_intrinsic_by_res(intrinsic, calibrated_size, processed_size):
+    """
+    Default camera's resolution is different with processing resolution. Therefore,
+    we need another intrinsic that is compatible with the processing resolution.
+    """
+    assert intrinsic.ndim in [2, 3]
+    if intrinsic.ndim == 2:
+        calibrated_h, calibrated_w = calibrated_size
+        processed_h, processed_w = processed_size
+        scale_w = processed_w / calibrated_w
+        scale_h = processed_h / calibrated_h
+        intrinsic[0, :] = intrinsic[0, :] * scale_w
+        intrinsic[1, :] = intrinsic[1, :] * scale_h
+    else:
+        assert calibrated_size.ndim == processed_size.ndim == 2
+        calibrated_h, calibrated_w = calibrated_size[..., 0], calibrated_size[..., 1]
+        processed_h, processed_w = processed_size[..., 0], processed_size[..., 1]
+        scale_w = processed_w / calibrated_w
+        scale_h = processed_h / calibrated_h
+        intrinsic[:, 0, :] *= scale_w[:, None]
+        intrinsic[:, 1, :] *= scale_h[:, None]
+
+    return intrinsic

@@ -82,7 +82,7 @@ detection_phase:
         - right foot index
   mmpose:
     convert_color_channel: false
-    landmark_thresh: 0.7
+    landmark_thresh: 0.5
     person_detection:
       is_enable: true
       person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
@@ -101,9 +101,9 @@ detection_phase:
       #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_right_cam_best_epoch480_weight.pth
       # ---- RTMPOSE-M ----
       left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241011_left_cam_best_epoch60_weight.pth
+      left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241016_left_cam_best_epoch60_weight.pth
       right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241011_right_cam_best_epoch280_weight.pth
+      right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241016_right_cam_best_epoch110_weight.pth
   fusing_landmark_dictionary:
     - left shoulder
     - left elbow
@@ -132,6 +132,27 @@ detection_phase:
     - PINKY_DIP
     - PINKY_TIP
     - right elbow
+    - RIGHT_WRIST
+    - RIGHT_THUMB_CMC
+    - RIGHT_THUMB_MCP
+    - RIGHT_THUMB_IP
+    - RIGHT_THUMB_TIP
+    - RIGHT_INDEX_FINGER_MCP
+    - RIGHT_INDEX_FINGER_PIP
+    - RIGHT_INDEX_FINGER_DIP
+    - RIGHT_INDEX_FINGER_TIP
+    - RIGHT_MIDDLE_FINGER_MCP
+    - RIGHT_MIDDLE_FINGER_PIP
+    - RIGHT_MIDDLE_FINGER_DIP
+    - RIGHT_MIDDLE_FINGER_TIP
+    - RIGHT_RING_FINGER_MCP
+    - RIGHT_RING_FINGER_PIP
+    - RIGHT_RING_FINGER_DIP
+    - RIGHT_RING_FINGER_TIP
+    - RIGHT_PINKY_MCP
+    - RIGHT_PINKY_PIP
+    - RIGHT_PINKY_DIP
+    - RIGHT_PINKY_TIP
 
 fusing_phase:
   fusing_methods:
@@ -162,13 +183,18 @@ fusing_phase:
     minmax_scaler_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240930/20240930-1308/input_scaler.pkl
 
 reduce_noise_phase:
-  landmarks_noise_reducer:
-    enable: false
-    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/landmarks_stats.json
-  angles_noise_reducer:
+  left_arm_angles_noise_reducer:
     enable: true
-    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/angles_stats.json
+    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/configuration/left_arm_angles_stats.json
     dim: 1
+  right_arm_angles_noise_reducer:
+    enable: true
+    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/configuration/right_arm_angles_stats.json
+    dim: 1
+  left_hand_angles_noise_reducer:
+    enable: false
+    dim: 1
+
 
 camera:
   frame_calibrated_size:
@@ -190,9 +216,14 @@ utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
   save_left_arm_angles: true
+  save_right_arm_angles: true
   save_left_hand_angles: true
-  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: false
+  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: true
+  fusing_left_arm: true
+  fusing_left_hand: false
+  fusing_right_arm: true
+  fusing_right_hand: false
 
 debugging_mode:
   draw_xyz: false

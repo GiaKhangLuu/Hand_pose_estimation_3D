@@ -5,7 +5,6 @@ from functools import partial
 from transformer_encoder import TransformerEncoder
 from ann import ANN
 from utilities import (fuse_landmarks_from_two_cameras,
-    convert_to_shoulder_coord,
     flatten_two_camera_input)
 from landmarks_scaler import LandmarksScaler
 from csv_writer import columns_to_normalize, fusion_csv_columns_name
@@ -15,17 +14,23 @@ class LandmarksFuser:
     Desc.
     """
 
-    def __init__(self, method_selected_id, method_list,
-        method_config, img_size):
+    def __init__(self, 
+                 method_selected_id, 
+                 method_list,
+                 method_config, 
+                 img_size):
         """
         Desc.
 
         Parameters:
-            attribute1 (type): Description of attribute1.
             attribute2 (type): Description of attribute2.
         """
         self._method_name = method_list[method_selected_id]
         config_by_method = method_config[self._method_name]
+        self._left_camera_first_intrinsic_value_idx = 144  
+        self._right_camera_first_lmk_value_idx = self._left_camera_first_intrinsic_value_idx + 9
+        self._right_camera_first_intrinsic_value_idx = self._right_camera_first_lmk_value_idx + 144
+        self._first_right_2_left_matrix_value_idx = self._right_camera_first_intrinsic_value_idx + 9
 
         if self._method_name == "transformer_encoder":
             # ------------ INIT TRANSFORMER ENCODER ------------
@@ -84,7 +89,6 @@ class LandmarksFuser:
         else:
             assert 0 == 1  
 
-
     def fuse(self, left_camera_wholebody_xyZ, 
         right_camera_wholebody_xyZ,
         left_camera_intr,
@@ -139,13 +143,8 @@ class LandmarksFuser:
             input_row = input_row[None, :]  # shape: (1, 322)
             input_row = self._landmarks_scaler(input_row)
 
-            left_camera_first_intrinsic_value_idx = 144  
-            right_camera_first_lmk_value_idx = left_camera_first_intrinsic_value_idx + 9
-            right_camera_first_intrinsic_value_idx = right_camera_first_lmk_value_idx + 144
-            first_right_2_left_matrix_value_idx = right_camera_first_intrinsic_value_idx + 9
-
-            left_camera_lmks = input_row[:, :left_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
-            right_camera_lmks = input_row[:, right_camera_first_lmk_value_idx:right_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
+            left_camera_lmks = input_row[:, :self._left_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
+            right_camera_lmks = input_row[:, self._right_camera_first_lmk_value_idx:self._right_camera_first_intrinsic_value_idx]  # shape: (N, 144), N = #rows
 
             input_row = np.concatenate([left_camera_lmks, right_camera_lmks], axis=1)
 

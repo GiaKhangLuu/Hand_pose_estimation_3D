@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime
@@ -51,14 +52,16 @@ class EarlyStopping:
 def train_model(model, 
     train_dataloader, 
     val_dataloader, 
-    criterion, 
     optimizer, 
     num_epochs=20, 
     save_path="model.pth",
     early_stopping=None,
     scheduler=None,
     writer=None,
-    log_seq=100):
+    log_seq=100,
+    weight_idx=None,
+    weight=None,
+    train_left_arm_hand_only=True):
     best_val_loss = float('inf')
     train_losses = []
     val_losses = []
@@ -72,10 +75,15 @@ def train_model(model,
             targets = targets.to("cuda")
             outputs = model(inputs)  # shape: (B, 144), B = batch_size, 144 = output_dim
             outputs = outputs.reshape(-1, 3, 48)  # shape: (B, 3, 48)
-            outputs = outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
             targets = targets.reshape(-1, 3, 48)
-            targets = targets[..., :26]
-            loss = criterion(outputs, targets)
+            if train_left_arm_hand_only:
+                targets = targets[..., :26]
+                outputs = outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
+            
+            elementwise_loss = F.mse_loss(outputs, targets, reduction='none')
+            if weight_idx:
+                elementwise_loss[..., weight_idx] *= weight
+            loss = elementwise_loss.mean()
 
             optimizer.zero_grad()
             loss.backward()
@@ -95,10 +103,16 @@ def train_model(model,
                 val_targets = val_targets.to("cuda")
                 val_outputs = model(val_inputs)
                 val_outputs = val_outputs.reshape(-1, 3, 48)  # shape: (B, 3, 48)
-                val_outputs = val_outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
                 val_targets = val_targets.reshape(-1, 3, 48)
-                val_targets = val_targets[..., :26]
-                val_loss += criterion(val_outputs, val_targets).item() 
+                if train_left_arm_hand_only:
+                    val_outputs = val_outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
+                    val_targets = val_targets[..., :26]
+                
+                val_batch_elementwise_loss = F.mse_loss(val_outputs, val_targets, reduction='none')
+                if weight_idx:
+                    val_batch_elementwise_loss[..., weight_idx] *= weight
+                val_batch_elementwise_loss = val_batch_elementwise_loss.mean()
+                val_loss += val_batch_elementwise_loss.item()
         val_loss = val_loss / len(val_dataloader)
         val_losses.append(val_loss)
 

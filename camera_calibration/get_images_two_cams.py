@@ -105,10 +105,12 @@ while True:
     if (not left_oak_queue.empty()) and (not right_oak_queue.empty()):
         #rs_frame = rs_queue.get()
         left_frame = left_oak_queue.get()
+        # Just resize to stream
         left_frame_stream = cv2.resize(left_frame, (1280, 720))
         cv2.imshow("Left OAK Combined", left_frame_stream)
         
         right_frame = right_oak_queue.get()
+        # Just resize to stream
         right_frame_stream = cv2.resize(right_frame, (1280, 720))
         cv2.imshow("Right OAK Combined", right_frame_stream)
 

@@ -155,6 +155,8 @@ def distance(Z,
     Input:
         right_side_xyZ: shape = (3,)
         opposite_xyZ: shape = (3,)
+        right_side_cam_intrinsic: shape = (3, 3)
+        opposite_cam_intrinsic: shape = (3, 3)
         right_to_opposite_correctmat: shape = (4, 4)
     """
 
@@ -183,11 +185,16 @@ def xyZ_to_XYZ(xyZ, intrinsic_mat):
     Output:
         XYZ: shape = (N, 3) or (M, N, 3)
     """
-
+    assert intrinsic_mat.ndim in [2, 3]
     XYZ = np.zeros_like(xyZ)
-    XYZ[..., 0] = (xyZ[..., 0] - intrinsic_mat[0, -1]) * xyZ[..., -1] / intrinsic_mat[0, 0]
-    XYZ[..., 1] = (xyZ[..., 1] - intrinsic_mat[1, -1]) * xyZ[..., -1] / intrinsic_mat[1, 1]
-    XYZ[..., -1] = xyZ[..., -1]
+    if intrinsic_mat.ndim == 2:
+        XYZ[..., 0] = (xyZ[..., 0] - intrinsic_mat[0, -1]) * xyZ[..., -1] / intrinsic_mat[0, 0]
+        XYZ[..., 1] = (xyZ[..., 1] - intrinsic_mat[1, -1]) * xyZ[..., -1] / intrinsic_mat[1, 1]
+        XYZ[..., -1] = xyZ[..., -1]
+    else:
+        XYZ[..., 0] = (xyZ[..., 0] - intrinsic_mat[:, 0, -1][:, None]) * xyZ[..., -1] / intrinsic_mat[:, 0, 0][:, None]
+        XYZ[..., 1] = (xyZ[..., 1] - intrinsic_mat[:, 1, -1][:, None]) * xyZ[..., -1] / intrinsic_mat[:, 1, 1][:, None]
+        XYZ[..., -1] = xyZ[..., -1]
 
     return XYZ 
 
@@ -202,6 +209,8 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
     Input:
         opposite_xyZ: shape = (N, 3)
         right_side_xyZ: shape = (N, 3)
+        right_side_cam_intrinsic: shape = (3, 3)
+        opposite_cam_intrinsic: shape = (3, 3)
         right_to_opposite_correctmat: shape = (4, 4)
     Output:
         fused_landmarks: shape (N, 3)
@@ -244,7 +253,7 @@ def fuse_landmarks_from_two_cameras(opposite_xyZ: NDArray,
 
     return fused_landmarks
 
-def convert_to_shoulder_coord(XYZ_landmarks: NDArray, landmark_dictionary) -> Tuple[NDArray, NDArray]:
+def convert_to_left_shoulder_coord(XYZ_landmarks: NDArray, landmark_dictionary) -> Tuple[NDArray, NDArray]:
     """
     Input: 
         XYZ_landmarks: (M, 3), M = #vectors, 3 = #features
@@ -437,6 +446,7 @@ def flatten_two_camera_input(left_camera_landmarks_xyZ,
     right_camera_intr,
     right_2_left_matrix,
     img_size,
+    frame_calibrated_size,
     timestamp=None,
     output_landmarks=None,
     mode="input"):
@@ -470,5 +480,10 @@ def flatten_two_camera_input(left_camera_landmarks_xyZ,
             right_input.flatten(),
             right_camera_intr.flatten(),
             right_2_left_matrix.flatten(),
-            output_landmarks.T.flatten()])
+            output_landmarks.T.flatten(),
+            [img_size[0]], 
+            [img_size[1]], 
+            [frame_calibrated_size[0]],
+            [frame_calibrated_size[1]]])
     return input_row
+

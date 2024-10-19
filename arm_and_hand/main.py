@@ -21,30 +21,31 @@ import socket
 import math
 from datetime import datetime
 
-from stream_3d import visualize_arm
+from stream_3d import visualize_sticky_man
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
 from csv_writer import (create_csv, 
     append_to_csv, 
     fusion_csv_columns_name, 
     split_train_test_val,
     left_arm_angles_name,
+    right_arm_angles_name,
     left_hand_angles_name)
-from utilities import (convert_to_shoulder_coord,
-    convert_to_wrist_coord,
+from utilities import (convert_to_left_shoulder_coord,
     flatten_two_camera_input)
 from common import (load_data_from_npz_file,
     get_oak_2_rs_matrix,
-    load_config)
-from send_left_arm_hand_angles_to_robot import send_angles_to_robot_using_pid
+    load_config, 
+    scale_intrinsic_by_res)
+from send_angles_to_robot import send_angles_to_robot_using_pid
 from landmarks_detectors import LandmarksDetectors
 from landmarks_fuser import LandmarksFuser
-from landmarks_noise_reducer import LandmarksNoiseReducer
 from angle_noise_reducer import AngleNoiseReducer
 from left_arm_angle_calculator import LeftArmAngleCalculator
+from right_arm_angle_calculator import RightArmAngleCalculator
 from left_hand_angle_calculator import LeftHandAngleCalculator
 
 # ------------------- READ CONFIG ------------------- 
-config_file_path = os.path.join(CURRENT_DIR, "configuration.yaml") 
+config_file_path = os.path.join(CURRENT_DIR, "configuration", "main_conf.yaml") 
 config = load_config(config_file_path)
 
 left_oak_mxid = config["camera"]["left_camera"]["mxid"]
@@ -63,7 +64,12 @@ draw_landmarks = config["utilities"]["draw_landmarks"]
 save_landmarks = config["utilities"]["save_landmarks"]
 save_images = config["utilities"]["save_images"]
 save_left_arm_angles = config["utilities"]["save_left_arm_angles"]
+save_right_arm_angles = config["utilities"]["save_right_arm_angles"]
 save_left_hand_angles = config["utilities"]["save_left_hand_angles"]
+is_left_arm_fused = config["utilities"]["fusing_left_arm"]
+is_left_hand_fused = config["utilities"]["fusing_left_hand"]
+is_right_arm_fused = config["utilities"]["fusing_right_arm"]
+is_right_hand_fused = config["utilities"]["fusing_right_hand"]
 
 detection_model_selection_id = config["detection_phase"]["model_selection_id"]
 detection_model_list = tuple(config["detection_phase"]["model_list"])
@@ -74,11 +80,13 @@ fusing_method_list = tuple(config["fusing_phase"]["fusing_methods"])
 fusing_method_selection_id = config["fusing_phase"]["fusing_selection_id"]
 
 reduce_noise_config = config["reduce_noise_phase"]
-enable_landmarks_noise_reducer = reduce_noise_config["landmarks_noise_reducer"]["enable"]
-landmarks_noise_statistical_file = reduce_noise_config["landmarks_noise_reducer"]["statistical_file"]
-enable_angles_noise_reducer = reduce_noise_config["angles_noise_reducer"]["enable"]
-angles_noise_statistical_file = reduce_noise_config["angles_noise_reducer"]["statistical_file"]
-angles_noise_reducer_dim = reduce_noise_config["angles_noise_reducer"]["dim"]
+enable_left_arm_angles_noise_reducer = reduce_noise_config["left_arm_angles_noise_reducer"]["enable"]
+left_arm_angles_noise_statistical_file = reduce_noise_config["left_arm_angles_noise_reducer"]["statistical_file"]
+left_arm_angles_noise_reducer_dim = reduce_noise_config["left_arm_angles_noise_reducer"]["dim"]
+enable_right_arm_angles_noise_reducer = reduce_noise_config["right_arm_angles_noise_reducer"]["enable"]
+right_arm_angles_noise_statistical_file = reduce_noise_config["right_arm_angles_noise_reducer"]["statistical_file"]
+right_arm_angles_noise_reducer_dim = reduce_noise_config["right_arm_angles_noise_reducer"]["dim"]
+enable_left_hand_angles_noise_reducer = reduce_noise_config["left_hand_angles_noise_reducer"]["enable"]
 
 draw_xyz = config["debugging_mode"]["draw_xyz"]
 draw_left_arm_coordinates = config["debugging_mode"]["show_left_arm"]
@@ -87,6 +95,37 @@ ref_vector_color = list(config["debugging_mode"]["ref_vector_color"])
 joint_vector_color = list(config["debugging_mode"]["joint_vector_color"])
 
 run_to_collect_data = config["run_to_collect_data_for_fusing_and_detection"]
+
+if is_left_hand_fused:
+    is_left_arm_fused = True 
+if is_right_hand_fused:
+    is_right_arm_fused = True
+        
+LANDMARKS_TO_FUSED = ["left shoulder", "left hip", "right shoulder", "right hip"]
+LANDMARKS_TO_FUSED_IDX = []
+if is_left_arm_fused:
+    LEFT_ARM_LANDMARKS_TO_FUSED = ["left elbow", "WRIST", "INDEX_FINGER_MCP", "MIDDLE_FINGER_MCP"]
+    LANDMARKS_TO_FUSED.extend(LEFT_ARM_LANDMARKS_TO_FUSED)
+if is_left_hand_fused:            
+    LEFT_HAND_LANDMARKS_TO_FUSED = ["THUMB_CMC", "THUMB_MCP", "THUMB_IP", "THUMB_TIP",    
+                                    "INDEX_FINGER_PIP", "INDEX_FINGER_DIP", "INDEX_FINGER_TIP",    
+                                    "MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP",    
+                                    "RING_FINGER_MCP", "RING_FINGER_PIP", "RING_FINGER_DIP", "RING_FINGER_TIP",    
+                                    "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP"]
+    LANDMARKS_TO_FUSED.extend(LEFT_HAND_LANDMARKS_TO_FUSED)
+if is_right_arm_fused:
+    RIGHT_ARM_LANDMARKS_TO_FUSED = ["right elbow", "RIGHT_WRIST", "RIGHT_INDEX_FINGER_MCP", "RIGHT_MIDDLE_FINGER_MCP"]
+    LANDMARKS_TO_FUSED.extend(RIGHT_ARM_LANDMARKS_TO_FUSED)                 
+if is_right_hand_fused:
+    RIGHT_HAND_LANDMARKS_TO_FUSED = ["RIGHT_THUMB_CMC", "RIGHT_THUMB_MCP", "RIGHT_THUMB_IP", "RIGHT_THUMB_TIP",    
+                                    "RIGHT_INDEX_FINGER_PIP", "RIGHT_INDEX_FINGER_DIP", "RIGHT_INDEX_FINGER_TIP",    
+                                    "RIGHT_MIDDLE_FINGER_PIP", "RIGHT_MIDDLE_FINGER_DIP", "RIGHT_MIDDLE_FINGER_TIP",    
+                                    "RIGHT_RING_FINGER_MCP", "RIGHT_RING_FINGER_PIP", "RIGHT_RING_FINGER_DIP", "RIGHT_RING_FINGER_TIP",    
+                                    "RIGHT_PINKY_MCP", "RIGHT_PINKY_PIP", "RIGHT_PINKY_DIP", "RIGHT_PINKY_TIP"]
+    LANDMARKS_TO_FUSED.extend(RIGHT_HAND_LANDMARKS_TO_FUSED)
+            
+for landmark_name in LANDMARKS_TO_FUSED:
+    LANDMARKS_TO_FUSED_IDX.append(arm_hand_fused_names.index(landmark_name)) 
 
 if run_to_collect_data:
     plot_3d = True
@@ -104,22 +143,8 @@ left_cam_data = load_data_from_npz_file(left_cam_calib_path)
 right_oak_r_raw, right_oak_t_raw, right_camera_intr = right_cam_data['rvecs'], right_cam_data['tvecs'], right_cam_data['camMatrix']
 left_oak_r_raw, left_oak_t_raw, left_camera_intr = left_cam_data['rvecs'], left_cam_data['tvecs'], left_cam_data['camMatrix']
 
-def _scale_intrinsic_by_res(intrinsic, original_size, processed_size):
-    """
-    Default camera's resolution is different with processing resolution. Therefore,
-    we need another intrinsic that is compatible with the processing resolution.
-    """
-    original_h, original_w = original_size
-    processed_h, processed_w = processed_size
-    scale_w = processed_w / original_w
-    scale_h = processed_h / original_h
-    intrinsic[0, :] = intrinsic[0, :] * scale_w
-    intrinsic[1, :] = intrinsic[1, :] * scale_h
-
-    return intrinsic
-
-right_camera_intr = _scale_intrinsic_by_res(right_camera_intr, frame_calibrated_size, frame_size[::-1])
-left_camera_intr = _scale_intrinsic_by_res(left_camera_intr, frame_calibrated_size, frame_size[::-1])
+right_camera_intr = scale_intrinsic_by_res(right_camera_intr, frame_calibrated_size, frame_size[::-1])
+left_camera_intr = scale_intrinsic_by_res(left_camera_intr, frame_calibrated_size, frame_size[::-1])
 
 right_2_left_mat_avg = get_oak_2_rs_matrix(right_oak_r_raw, right_oak_t_raw, 
     left_oak_r_raw, left_oak_t_raw)
@@ -134,19 +159,27 @@ TARGET_LEFT_ARM_HAND_ANGLES_QUEUE = queue.Queue()  # This queue stores target an
 
 landmarks_detectors = LandmarksDetectors(detection_model_selection_id, 
     detection_model_list, config["detection_phase"], draw_landmarks)
-landmarks_fuser = LandmarksFuser(fusing_method_selection_id,
-    fusing_method_list, config["fusing_phase"], frame_size)
-if enable_landmarks_noise_reducer:
-    landmarks_noise_reducer = LandmarksNoiseReducer(landmarks_noise_statistical_file)
-if enable_angles_noise_reducer:
-    angle_noise_reducer = AngleNoiseReducer(angles_noise_statistical_file=angles_noise_statistical_file, 
-        dim=angles_noise_reducer_dim)
+landmarks_fuser = LandmarksFuser(
+    method_selected_id=fusing_method_selection_id,
+    method_list=fusing_method_list, 
+    method_config=config["fusing_phase"], 
+    img_size=frame_size)
+if enable_left_arm_angles_noise_reducer:
+    left_arm_angle_noise_reducer = AngleNoiseReducer(
+        angles_noise_statistical_file=left_arm_angles_noise_statistical_file, 
+        dim=left_arm_angles_noise_reducer_dim)
+if enable_right_arm_angles_noise_reducer:
+    right_arm_angle_noise_reducer = AngleNoiseReducer(
+        angles_noise_statistical_file=right_arm_angles_noise_statistical_file,
+        dim=right_arm_angles_noise_reducer_dim)
 left_arm_angle_calculator = LeftArmAngleCalculator(num_chain=3, landmark_dictionary=arm_hand_fused_names)
+right_arm_angle_calculator = RightArmAngleCalculator(num_chain=3, landmark_dictionary=arm_hand_fused_names)
 left_hand_angle_calculator = LeftHandAngleCalculator(num_chain=2, landmark_dictionary=arm_hand_fused_names)
 
 if __name__ == "__main__":
     if (save_landmarks or
         save_left_arm_angles or
+        save_right_arm_angles or 
         save_left_hand_angles or
         save_images):
         current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
@@ -169,6 +202,10 @@ if __name__ == "__main__":
             LEFT_ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_arm_angle_{}.csv".format(current_time))
             create_csv(LEFT_ARM_ANGLE_CSV_PATH, left_arm_angles_name)
             
+        if save_right_arm_angles:
+            RIGHT_ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "right_arm_angle_{}.csv".format(current_time))
+            create_csv(RIGHT_ARM_ANGLE_CSV_PATH, right_arm_angles_name)
+            
         if save_left_hand_angles:
             LEFT_HAND_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_hand_angle_{}.csv".format(current_time))
             create_csv(LEFT_HAND_ANGLE_CSV_PATH, left_hand_angles_name)
@@ -190,16 +227,21 @@ if __name__ == "__main__":
         send_left_arm_hand_data_thread.start()
 
     if plot_3d:
-        vis_arm_thread = threading.Thread(target=visualize_arm,
+        vis_arm_thread = threading.Thread(target=visualize_sticky_man,
             args=(arm_points_vis_queue, 
                 arm_hand_fused_names,
+                LANDMARKS_TO_FUSED_IDX,
                 left_arm_angle_calculator,
                 left_hand_angle_calculator,
                 draw_xyz,
                 draw_left_arm_coordinates,
                 draw_left_hand_coordinates,
                 joint_vector_color,
-                ref_vector_color,),
+                ref_vector_color,
+                is_left_arm_fused,
+                is_left_hand_fused,
+                is_right_arm_fused,
+                is_right_hand_fused),
             daemon=True)
         vis_arm_thread.start()
 
@@ -240,77 +282,100 @@ if __name__ == "__main__":
             right_camera_body_landmarks_xyZ is not None and
             left_camera_body_landmarks_xyZ.shape[0] == len(arm_hand_fused_names) and
             left_camera_body_landmarks_xyZ.shape[0] == right_camera_body_landmarks_xyZ.shape[0]):
-            arm_hand_fused_XYZ = landmarks_fuser.fuse(left_camera_body_landmarks_xyZ,
-                right_camera_body_landmarks_xyZ,
-                left_camera_intr,
-                right_camera_intr,
-                right_2_left_mat_avg)
+            
+            left_xyZ_to_fused = np.zeros_like(left_camera_body_landmarks_xyZ, dtype=np.float64)
+            right_xyZ_to_fused = np.zeros_like(right_camera_body_landmarks_xyZ, dtype=np.float64)
+            
+            left_xyZ_to_fused[LANDMARKS_TO_FUSED_IDX] = left_camera_body_landmarks_xyZ[LANDMARKS_TO_FUSED_IDX]
+            right_xyZ_to_fused[LANDMARKS_TO_FUSED_IDX] = right_camera_body_landmarks_xyZ[LANDMARKS_TO_FUSED_IDX]
+            
+            arm_hand_fused_XYZ = landmarks_fuser.fuse(
+                left_camera_wholebody_xyZ=left_xyZ_to_fused,
+                right_camera_wholebody_xyZ=right_xyZ_to_fused,
+                left_camera_intr=left_camera_intr,
+                right_camera_intr=right_camera_intr,
+                right_2_left_matrix=right_2_left_mat_avg)
 
-            if enable_landmarks_noise_reducer:
-                arm_hand_fused_XYZ = landmarks_noise_reducer(arm_hand_fused_XYZ)
-
-            arm_hand_XYZ_wrt_shoulder, xyz_origin = convert_to_shoulder_coord(
+            arm_hand_XYZ_wrt_left_shoulder, xyz_origin = convert_to_left_shoulder_coord(
                 arm_hand_fused_XYZ,
                 arm_hand_fused_names)
-
-            if (arm_hand_XYZ_wrt_shoulder is not None and
+            
+            if (arm_hand_XYZ_wrt_left_shoulder is not None and
                 xyz_origin is not None):
 
-                left_arm_result = left_arm_angle_calculator(arm_hand_XYZ_wrt_shoulder, 
-                    parent_coordinate=xyz_origin)
-                left_arm_angles = left_arm_result["left_arm"]["angles"]
-                left_arm_rot_mats_wrt_origin = left_arm_result["left_arm"]["rot_mats_wrt_origin"]
-                left_arm_rot_mats_wrt_parent = left_arm_result["left_arm"]["rot_mats_wrt_parent"]
-                last_coordinate_from_left_arm = left_arm_rot_mats_wrt_origin[-1]
-                left_hand_result = left_hand_angle_calculator(arm_hand_XYZ_wrt_shoulder, 
-                    parent_coordinate=last_coordinate_from_left_arm)
-                succeed_in_fusing_landmarks = True
-
-                # Uncomment these two lines below to carefully test on real robot because joint4, joint5 and joint6 dont in a danger position when colliding.
-                #angle_j1, angle_j2, angle_j3, angle_j4, angle_j5, angle_j6 = angles
-                #angles = np.array([0,0,0, angle_j4, angle_j5, angle_j6])
-                
-                if save_left_arm_angles:
+                if is_left_arm_fused:
+                    left_arm_result = left_arm_angle_calculator(arm_hand_XYZ_wrt_left_shoulder, 
+                        parent_coordinate=xyz_origin)
+                    left_arm_angles = left_arm_result["left_arm"]["angles"]
+                    left_arm_rot_mats_wrt_origin = left_arm_result["left_arm"]["rot_mats_wrt_origin"]
+                    last_coordinate_from_left_arm = left_arm_rot_mats_wrt_origin[-1]
+                    
                     raw_left_arm_angles = [*left_arm_angles]
+                    if enable_left_arm_angles_noise_reducer:
+                        left_arm_angles = np.array(left_arm_angles)
+                        left_arm_angles = left_arm_angle_noise_reducer(left_arm_angles)
+                    smooth_left_arm_angles = [*left_arm_angles]
+                else:
+                    last_coordinate_from_left_arm = None
+                    left_arm_result = None
+                    left_arm_angles = raw_left_arm_angles = smooth_left_arm_angles = [0] * 6 
                     
-                if enable_angles_noise_reducer:
-                    left_arm_angles = np.array(left_arm_angles)
-                    left_arm_angles = angle_noise_reducer(left_arm_angles)
+                if is_right_arm_fused:
+                    right_arm_result = right_arm_angle_calculator(arm_hand_XYZ_wrt_left_shoulder,
+                        parent_coordinate=xyz_origin)
+                    right_arm_angles = right_arm_result["right_arm"]["angles"]
+                    right_arm_rot_mats_wrt_origin = right_arm_result["right_arm"]["rot_mats_wrt_origin"]
+                    last_coordinate_from_right_arm = right_arm_rot_mats_wrt_origin[-1]
 
-                if save_left_arm_angles:
-                    smoothed_left_arm_angles = [*left_arm_angles]
+                    raw_right_arm_angles = [*right_arm_angles]
+                    if enable_right_arm_angles_noise_reducer:
+                        right_arm_angles = np.array(right_arm_angles)
+                        right_arm_angles = right_arm_angle_noise_reducer(right_arm_angles)
+                    smooth_right_arm_angles = [*right_arm_angles]
+                else:
+                    right_arm_result = None
+                    right_arm_angles = raw_right_arm_angles = smooth_right_arm_angles = [0] * 6
+                    
+                if is_left_hand_fused:
+                    left_hand_result = left_hand_angle_calculator(arm_hand_XYZ_wrt_left_shoulder, 
+                        parent_coordinate=last_coordinate_from_left_arm)
+                    left_hand_angles = []
+                    for finger_name in left_hand_angle_calculator.fingers_name:
+                        finger_i_angles = left_hand_result[finger_name]["angles"].copy()
 
+                        # In robot, its finger joint 1 is our finger joint 2, and vice versa (EXCEPT FOR THUMB FINGER). 
+                        # So that, we need to swap these values.
+                        if finger_name != "THUMB":
+                            finger_i_angles[0], finger_i_angles[1] = finger_i_angles[1], finger_i_angles[0]
+
+                        left_hand_angles.extend(finger_i_angles)
+                    
+                    raw_left_hand_angles = [*left_hand_angles] 
+                    if enable_left_hand_angles_noise_reducer:    
+                        # TODO: Applying reducer for left hand angles
+                        pass
+                    smooth_left_hand_angles = [*left_hand_angles]
+                else:
+                    left_hand_result = None
+                    left_hand_angles = raw_left_hand_angles = smooth_left_hand_angles = [0] * 15
+                    
+                succeed_in_fusing_landmarks = True
+                
                 left_arm_angles_to_send = np.array(left_arm_angles)
-
-                left_hand_angles = []
-                for finger_name in left_hand_angle_calculator.fingers_name:
-                    finger_i_angles = left_hand_result[finger_name]["angles"].copy()
-
-                    # In robot, its finger joint 1 is our finger joint 2, and vice versa (EXCEPT FOR THUMB FINGER). 
-                    # So that, we need to swap these values.
-                    if finger_name != "THUMB":
-                        finger_i_angles[0], finger_i_angles[1] = finger_i_angles[1], finger_i_angles[0]
-
-                    left_hand_angles.extend(finger_i_angles)
-                
-                if save_left_hand_angles:
-                    raw_left_hand_angles = [*left_hand_angles]     
-                
-                # TODO: Applying reducer for left hand angles
-                    
-                if save_left_hand_angles:
-                    smoothed_left_hand_angles = [*left_hand_angles]
-                
+                right_arm_angles_to_send = np.array(right_arm_angles)
                 left_hand_angles_to_send = np.array(left_hand_angles)
-                left_hand_arm_angles_to_send = np.concatenate([left_arm_angles_to_send, left_hand_angles_to_send])
+                
+                angles_sent_to_robot = np.concatenate([left_arm_angles_to_send, 
+                    right_arm_angles_to_send,                                                       
+                    left_hand_angles_to_send])
 
                 if send_udp:
-                    TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.put((left_hand_arm_angles_to_send, timestamp))
+                    TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.put((angles_sent_to_robot, timestamp))
                     if TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.qsize() > 1:
                         TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.get()
 
                 if plot_3d: 
-                    lmks_and_angle_result = (arm_hand_XYZ_wrt_shoulder, xyz_origin, left_arm_result, left_hand_result)
+                    lmks_and_angle_result = (arm_hand_XYZ_wrt_left_shoulder, xyz_origin, left_arm_result, left_hand_result)
                     arm_points_vis_queue.put(lmks_and_angle_result)
                     if arm_points_vis_queue.qsize() > 1:
                         arm_points_vis_queue.get()
@@ -318,12 +383,14 @@ if __name__ == "__main__":
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
                     output_landmarks = np.concatenate([arm_hand_fused_XYZ, 
                         np.zeros((48 - arm_hand_fused_XYZ.shape[0], 3))])
-                    input_row = flatten_two_camera_input(left_camera_body_landmarks_xyZ,
-                        right_camera_body_landmarks_xyZ,
-                        left_camera_intr,
-                        right_camera_intr,
-                        right_2_left_mat_avg,
-                        frame_size,
+                    input_row = flatten_two_camera_input(
+                        left_camera_landmarks_xyZ=left_camera_body_landmarks_xyZ,
+                        right_camera_landmarks_xyZ=right_camera_body_landmarks_xyZ,
+                        left_camera_intr=left_camera_intr,
+                        right_camera_intr=right_camera_intr,
+                        right_2_left_matrix=right_2_left_mat_avg,
+                        img_size=frame_size,
+                        frame_calibrated_size=frame_calibrated_size[::-1], 
                         mode="ground_truth",
                         timestamp=timestamp,
                         output_landmarks=output_landmarks)
@@ -354,14 +421,21 @@ if __name__ == "__main__":
             row_left_arm_angles_writed_to_file = [timestamp, 
                                                   round(fps, 1), 
                                                   *raw_left_arm_angles,
-                                                  *smoothed_left_arm_angles]
+                                                  *smooth_left_arm_angles]
             append_to_csv(LEFT_ARM_ANGLE_CSV_PATH, row_left_arm_angles_writed_to_file)
+            
+        if save_right_arm_angles and succeed_in_fusing_landmarks:
+            row_right_arm_angles_writed_to_file = [timestamp,
+                                                   round(fps, 1), 
+                                                   *raw_right_arm_angles,
+                                                   *smooth_right_arm_angles]
+            append_to_csv(RIGHT_ARM_ANGLE_CSV_PATH, row_right_arm_angles_writed_to_file)
                     
         if save_left_hand_angles and succeed_in_fusing_landmarks:
             row_left_hand_angles_writed_to_file = [timestamp,
                                                    round(fps, 1),
                                                    *raw_left_hand_angles,
-                                                   *smoothed_left_hand_angles] 
+                                                   *smooth_left_hand_angles] 
             append_to_csv(LEFT_HAND_ANGLE_CSV_PATH, row_left_hand_angles_writed_to_file)
 
         timestamp += 1

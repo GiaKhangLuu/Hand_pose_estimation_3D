@@ -103,9 +103,11 @@ class LandmarksDetectors:
                 self._right_camera_body_detector = None
         else:
             # -------------- INIT MMPOSE MODELS -------------- 
-            self._mmpose_selected_landmarks_id = [5, 7, 11, 6, 12, 91, 92, 93, 94, 95, 
-                96, 97, 98, 99, 100, 101, 102, 103, 104, 
-                105, 106, 107, 108, 109, 110, 111, 8]
+            self._mmpose_selected_landmarks_id = [
+                5, 7, 11, 6, 12,  # thumb
+                91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, # left hand
+                8, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132  # right hand
+                ]  
             self._mmpose_cvt_color = config_by_model["convert_color_channel"]
             self._person_detection_activation = config_by_model["person_detection"]["is_enable"]
             person_detector_config = config_by_model["person_detection"]["person_detector_config"]

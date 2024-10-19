@@ -24,7 +24,7 @@ class AngleNoiseReducer():
                 joint_stat = angles_stats[j_name]
                 measure_noise = joint_stat["measure_noise"]
                 initial_cov = joint_stat["cov"]
-                initial_est = joint_stat["filter_state_estimate"]
+                initial_est = joint_stat["init_angle"]
 
                 f = KalmanFilter(dim=self._dim, 
                     measurement_noise=measure_noise, 
@@ -35,7 +35,7 @@ class AngleNoiseReducer():
         else:
             measure_noise = np.array(angles_stats["measure_noise"], dtype=np.float64).reshape(6, 6)
             initial_cov = np.array(angles_stats["cov"], dtype=np.float64).reshape(6, 6)
-            initial_est = np.array(angles_stats["filter_state_estimate"], dtype=np.float64)
+            initial_est = np.array(angles_stats["init_angle"], dtype=np.float64)
 
             self._kalman_filters = KalmanFilter(dim=self._dim,
                 measurement_noise=measure_noise,

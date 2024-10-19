@@ -14,12 +14,11 @@ from send_lefthand_data_to_robot import degree_to_radian
 
 CLIENT_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #server_ip = "127.0.0.1"
-#server_ip = "192.168.0.143"
 SERVER_IP = "192.168.0.155"
 SERVER_PORT = 12345
 global_timestamp = 0
 
-FPS = 60
+FPS = 100
 TIME_SLEEP = 1 / FPS
 
 NUM_ARM_ANGLES = 6
@@ -86,6 +85,6 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
         udp_mess = str(next_rad_angles)
         CLIENT_SOCKET.sendto(udp_mess.encode(), (SERVER_IP, SERVER_PORT))
 
-        #print(udp_mess)
+        print(udp_mess)
 
         time.sleep(TIME_SLEEP)

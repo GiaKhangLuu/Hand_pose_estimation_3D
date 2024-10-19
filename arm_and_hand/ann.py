@@ -17,9 +17,13 @@ class ANN(nn.Module):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.BatchNorm1d(hidden_dim, affine=False))
             layers.append(nn.SiLU())
-            layers.append(nn.Dropout(dropout_rate))
 
         layers.append(nn.Linear(hidden_dim, output_dim))
+        layers.append(nn.BatchNorm1d(output_dim, affine=False))
+        layers.append(nn.SiLU())
+        layers.append(nn.Dropout(dropout_rate))
+        
+        layers.append(nn.Linear(output_dim, output_dim))
         layers.append(nn.BatchNorm1d(output_dim, affine=False))
         layers.append(nn.SiLU())
         layers.append(nn.Dropout(dropout_rate))
