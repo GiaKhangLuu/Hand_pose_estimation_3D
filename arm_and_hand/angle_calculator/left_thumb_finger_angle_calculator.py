@@ -43,7 +43,7 @@ Which:
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from left_finger_angle_calculator import LeftFingerAngleCalculator
+from .left_finger_angle_calculator import LeftFingerAngleCalculator
 
 mcp_vector_in_init_frame = None
 ip_vector_in_init_frame = None

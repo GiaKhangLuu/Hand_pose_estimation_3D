@@ -24,7 +24,13 @@ from common import (get_xyZ,
     get_depth)
 
 class LandmarksDetectors:
-    def __init__(self, model_selected_id, model_list, model_config, draw_landmarks):
+    def __init__(
+        self, 
+        model_selected_id, 
+        model_list, 
+        model_config, 
+        draw_landmarks
+    ):
         """
         Desc.
         Parameters:
@@ -36,7 +42,6 @@ class LandmarksDetectors:
         config_by_model = model_config[self._model_name]
         hand_to_fuse = model_config["hand_to_fuse"]
         arm_to_fuse = model_config["arm_to_fuse"]
-        self._fusing_landmark_names = model_config["fusing_landmark_dictionary"]
         self._num_person_to_detect = model_config["num_person_to_detect"]
         self._draw_landmarks = draw_landmarks
 
@@ -67,8 +72,6 @@ class LandmarksDetectors:
             self._body_hand_fused_names = body_landmarks_names_want_to_get[:-1].copy()  # remove right_elbow
             self._body_hand_fused_names.extend(hand_landmarks_name)
             self._body_hand_fused_names.append(body_landmarks_names_want_to_get[-1])  # append right_elbow back
-
-            assert self._body_hand_fused_names == self._fusing_landmark_names
 
             if self._hand_detection_activation:
                 hand_base_options = python.BaseOptions(model_asset_path=hand_model_path,
@@ -103,11 +106,7 @@ class LandmarksDetectors:
                 self._right_camera_body_detector = None
         else:
             # -------------- INIT MMPOSE MODELS -------------- 
-            self._mmpose_selected_landmarks_id = [
-                5, 7, 11, 6, 12,  # thumb
-                91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, # left hand
-                8, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132  # right hand
-                ]  
+            self._mmpose_selected_landmarks_id = list(config_by_model["selected_landmarks_idx"])
             self._mmpose_cvt_color = config_by_model["convert_color_channel"]
             self._person_detection_activation = config_by_model["person_detection"]["is_enable"]
             person_detector_config = config_by_model["person_detection"]["person_detector_config"]

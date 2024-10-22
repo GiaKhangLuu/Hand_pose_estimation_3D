@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from left_finger_angle_calculator import LeftFingerAngleCalculator
-from left_thumb_finger_angle_calculator import LeftThumbFingerAngleCalculator
+from .left_finger_angle_calculator import LeftFingerAngleCalculator
+from .left_thumb_finger_angle_calculator import LeftThumbFingerAngleCalculator
 
 # These five quaternion vectors get from ROS2, which are formatted: (x, y, z, w)
 wrist_to_home_position_thumb_finger_quat = [-0.794, 0.078, 0.105, 0.593]

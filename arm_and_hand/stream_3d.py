@@ -20,6 +20,7 @@ def visualize_sticky_man(lmks_queue,
     draw_left_hand_coordinates=None,
     joint_vector_color=None,
     ref_vector_color=None,
+    is_head_fused=False,
     is_left_arm_fused=False,
     is_left_hand_fused=False,
     is_right_arm_fused=False,
@@ -83,6 +84,10 @@ def visualize_sticky_man(lmks_queue,
                             [44, 45], [45, 46], [46, 47]]  # pinky lines
         lines.extend(right_hand_lines)
         colors.extend([[0, 0, 0] for i in range(len(right_hand_lines))])
+    if is_head_fused:
+        head_lines = [[0, 51], [3, 52], [51, 49], [52, 50], [49, 50], [49, 48], [50, 48]]
+        lines.extend(head_lines)
+        colors.extend([0, 0, 0] for i in range(len(head_lines)))
     
     while True:
         """

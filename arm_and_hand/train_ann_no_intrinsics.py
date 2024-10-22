@@ -74,8 +74,8 @@ def train_model(model,
             inputs = inputs.to("cuda")
             targets = targets.to("cuda")
             outputs = model(inputs)  # shape: (B, 144), B = batch_size, 144 = output_dim
-            outputs = outputs.reshape(-1, 3, 48)  # shape: (B, 3, 48)
-            targets = targets.reshape(-1, 3, 48)
+            outputs = outputs.reshape(-1, 3, 21)  # shape: (B, 3, 44). For now, we use fused thumb as input => already removed thumb in output nodes
+            targets = targets.reshape(-1, 3, 21)
             if train_left_arm_hand_only:
                 targets = targets[..., :26]
                 outputs = outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
@@ -102,8 +102,8 @@ def train_model(model,
                 val_inputs = val_inputs.to("cuda")
                 val_targets = val_targets.to("cuda")
                 val_outputs = model(val_inputs)
-                val_outputs = val_outputs.reshape(-1, 3, 48)  # shape: (B, 3, 48)
-                val_targets = val_targets.reshape(-1, 3, 48)
+                val_outputs = val_outputs.reshape(-1, 3, 21)  # shape: (B, 3, 48)
+                val_targets = val_targets.reshape(-1, 3, 21)
                 if train_left_arm_hand_only:
                     val_outputs = val_outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
                     val_targets = val_targets[..., :26]

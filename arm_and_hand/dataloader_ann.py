@@ -10,12 +10,12 @@ from scipy.spatial.distance import euclidean
 import glob
 from landmarks_scaler import LandmarksScaler
 from csv_writer import fusion_csv_columns_name
-from common import scale_intrinsic_by_res
 from utilities import xyZ_to_XYZ
 
 class HandArmLandmarksDataset_ANN(Dataset):
     def __init__(self, 
         filepaths,
+        fusing_landmark_dictionary,
         body_lines=None,
         lefthand_lines=None,
         body_distance_thres=500, 
@@ -24,7 +24,8 @@ class HandArmLandmarksDataset_ANN(Dataset):
         filter_outlier=True,
         only_keep_frames_contain_lefthand=True,
         scaler=None,
-        cvt_normalized_xy_to_XY=True):
+        cvt_normalized_xy_to_XY=True,
+        use_fused_thumb_as_input=False):
         """
         We use body_lines to calculate the distance between two adjacent landmarks and filter out
         outlier with the threshold. For more info., check out notebook "data/label_for_fusing_model.ipynb".
@@ -44,6 +45,14 @@ class HandArmLandmarksDataset_ANN(Dataset):
         self._lefthand_distance_thres = lefthand_distance_thres
         self._scaler = scaler
         self._cvt_normalized_xy_to_XY = cvt_normalized_xy_to_XY
+        self._use_fused_thumb_as_input = use_fused_thumb_as_input
+        self._fusing_landmark_dictionary = fusing_landmark_dictionary
+
+        self._thumb_landmarks = ["left shoulder", "left hip", "right shoulder", "right hip", 
+            "left elbow", "WRIST", 
+            "THUMB_CMC", "INDEX_FINGER_MCP", "MIDDLE_FINGER_MCP", "RING_FINGER_MCP", "PINKY_MCP",
+            "THUMB_TIP", "INDEX_FINGER_TIP", "MIDDLE_FINGER_TIP", "RING_FINGER_TIP", "PINKY_TIP"]
+        self._thumb_idx = [self._fusing_landmark_dictionary.index(lmks) for lmks in self._thumb_landmarks]
 
         for filepath in filepaths:
             data = pd.read_csv(filepath)
@@ -93,12 +102,13 @@ class HandArmLandmarksDataset_ANN(Dataset):
             self._filter_outlier()
             
         # Scale intrinsic
-        self._left_cam_intrinsic_container = scale_intrinsic_by_res(self._left_cam_intrinsic_container,
-                                                                    self._calibrated_frame_size_container[..., ::-1],
-                                                                    self._frame_size_containter[..., ::-1])
-        self._right_cam_intrinsic_container = scale_intrinsic_by_res(self._right_cam_intrinsic_container,
-                                                                        self._calibrated_frame_size_container[..., ::-1],
-                                                                        self._frame_size_containter[..., ::-1])
+        # -> Dont need to scale intrinsic matrix anymore, because these matrices were scaled before.
+        #self._left_cam_intrinsic_container = scale_intrinsic_by_res(self._left_cam_intrinsic_container,
+                                                                    #self._calibrated_frame_size_container[..., ::-1],
+                                                                    #self._frame_size_containter[..., ::-1])
+        #self._right_cam_intrinsic_container = scale_intrinsic_by_res(self._right_cam_intrinsic_container,
+                                                                        #self._calibrated_frame_size_container[..., ::-1],
+                                                                        #self._frame_size_containter[..., ::-1])
             
         if self._cvt_normalized_xy_to_XY:
             input_df = pd.DataFrame(self._inputs, columns=fusion_csv_columns_name[1:fusion_csv_columns_name.index("left_shoulder_output_x")])
@@ -139,6 +149,17 @@ class HandArmLandmarksDataset_ANN(Dataset):
             right_camera_XYZ = right_camera_XYZ.reshape(-1, 3 * 48)
             
             self._inputs = np.concatenate([left_camera_XYZ, right_camera_XYZ], axis=1)
+
+        if self._use_fused_thumb_as_input:
+            fusing_lmks = self._outputs.copy()  
+            fusing_lmks = fusing_lmks.reshape(-1, 3, 48)  # shape: (N, 3, 48)
+            thumb_XYZ_landmarks = fusing_lmks[..., self._thumb_idx]  # shape: (N, 3, 4)
+            self._inputs = self._inputs.reshape(-1, 3, 48 * 2)  # shape: (N, 3, 48 * 2)
+            self._inputs = np.concatenate([self._inputs, thumb_XYZ_landmarks], axis=-1)  # shape: (N, 3, 48 * 2 + 4)
+            self._inputs = self._inputs.reshape(-1, 3 * (48 * 2 + len(self._thumb_landmarks)))
+            #self._outputs = self._outputs.reshape(-1, 3, 48)
+            #self._outputs[..., thumb_idx] *= 0.0
+            #self._outputs = self._outputs.reshape(-1, 3 * 48)
         
         if self._scaler:
             assert isinstance(self._scaler, LandmarksScaler)

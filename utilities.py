@@ -458,10 +458,8 @@ def flatten_two_camera_input(left_camera_landmarks_xyZ,
     left_camera_norm_xyZ[:, 1] = left_camera_landmarks_xyZ[:, 1] / img_size[1]
     right_camera_norm_xyZ[:, 0] = right_camera_landmarks_xyZ[:, 0] / img_size[0]
     right_camera_norm_xyZ[:, 1] = right_camera_landmarks_xyZ[:, 1] / img_size[1]
-    left_input = np.concatenate([left_camera_norm_xyZ,
-        np.zeros((48 - left_camera_norm_xyZ.shape[0], 3))], axis=0)
-    right_input = np.concatenate([right_camera_norm_xyZ,
-        np.zeros((48 - right_camera_norm_xyZ.shape[0], 3))], axis=0)
+    left_input = left_camera_norm_xyZ
+    right_input = right_camera_norm_xyZ
     left_input = left_input.T  # shape: (3, 48)
     right_input = right_input.T  # shape: (3, 48)
 
