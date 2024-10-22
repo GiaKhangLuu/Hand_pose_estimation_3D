@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from chain_angle_calculator import ChainAngleCalculator
+from .arm_angle_calculator import ArmAngleCalculator
 
 shoulder_vector_in_init_frame = None
 elbow_vector_in_init_frame = None
@@ -11,22 +11,25 @@ rotation_matrix_for_elbow = R.from_euler("xz", [90, -90], degrees=True).as_matri
 rotation_matrix_for_wrist = R.from_euler("y", -90, degrees=True).as_matrix()
 
 STATIC_BOUND = 2
-joint1_min = -195 
-joint1_max = 86 
-joint2_min = -3 
-joint2_max = 92 
-joint3_min = -143 
-joint3_max = 143 
-joint4_min = -91 
-joint4_max = 22 
-joint5_min = -115 
-joint5_max = 206 
-joint6_min = -69 
-joint6_max = 52 
+joint1_min = -86
+joint1_max = 195
+joint2_min = -92
+joint2_max = 3
+joint3_min = -143
+joint3_max = 143
+joint4_min = -22
+joint4_max = 91
+joint5_min = -206
+joint5_max = 115
+joint6_min = -69
+joint6_max = 52
 
-class LeftArmAngleCalculator(ChainAngleCalculator):
+class RightArmAngleCalculator(ArmAngleCalculator):
     def __init__(self, num_chain, landmark_dictionary):
-        self.landmarks_name = ("shoulder", "elbow", "WRIST")  # keep a capital word in order for compatibility with the `landmark_dictionary`
+        """
+        TODO: Doc.
+        """
+        self.landmarks_name = ("right shoulder", "right elbow", "RIGHT_WRIST")  # keep a capital word in order for compatibility with the `landmark_dictionary`
         self._mapping_to_robot_angle_func_container = [
             (self._joint1_angle_to_TomOSPC_angle, self._joint2_angle_to_TomOSPC_angle),
             (self._joint3_angle_to_TomOSPC_angle, self._joint4_angle_to_TomOSPC_angle),
@@ -71,11 +74,11 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
         self._clip_angle_of_two_joints_flag_container = [
             [True, True],
             [True, True],
-            [True, True]
+            [True, False]
         ]
 
-        super().__init__(num_chain, landmark_dictionary)
-
+        super().__init__(num_chain, landmark_dictionary, "right")
+        
     def _joint1_angle_to_TomOSPC_angle(self, joint1_angle):
         """
         TODO: doc. 
@@ -85,9 +88,9 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
             tomospc_angle_j1 (int): 
         """
         if -90 <= joint1_angle <= 180:
-            tomospc_angle_j1 = -joint1_angle
+            tomospc_angle_j1 = joint1_angle
         else:
-            tomospc_angle_j1 = -joint1_angle - 360
+            tomospc_angle_j1 = 360 + joint1_angle
         return tomospc_angle_j1 
 
     def _joint2_angle_to_TomOSPC_angle(self, joint2_angle):
@@ -120,7 +123,7 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
         Output:
             tomospc_angle_j4 (int): 
         """
-        tomospc_angle_j4 = joint4_angle
+        tomospc_angle_j4 = -joint4_angle
         return tomospc_angle_j4
 
     def _joint5_angle_to_TomOSPC_angle(self, joint5_angle):
@@ -131,12 +134,11 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
         Output:
             tomospc_angle_j5 (int): 
         """
-        global joint5_max
-        if joint5_angle > 115:
-            tomospc_angle_j5 = min(joint5_max, -joint5_angle + 360)
-        else:
+        global joint5_min
+        if -115 <= joint5_angle <= 180:
             tomospc_angle_j5 = -joint5_angle
-
+        else:
+            tomospc_angle_j5 = min(joint5_min, -(joint5_angle - 360))
         return tomospc_angle_j5
 
     def _joint6_angle_to_TomOSPC_angle(self, joint6_angle):
@@ -149,12 +151,12 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
         """
         tomospc_angle_j6 = -joint6_angle
         return tomospc_angle_j6
-
+    
     def _get_landmark_vector(self, chain_idx, XYZ_landmarks):
         landmark_name = self.landmarks_name[chain_idx]
-        if landmark_name == "shoulder":
+        if landmark_name == "right shoulder":
             landmark_vec = self._get_shoulder_vector(XYZ_landmarks)
-        elif landmark_name == "elbow":
+        elif landmark_name == "right elbow":
             landmark_vec = self._get_elbow_vector(XYZ_landmarks)
         else:
             landmark_vec = self._get_wrist_vector(XYZ_landmarks)
@@ -169,7 +171,9 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
         Output:
             shoulder_vec:
         """
-        shoulder_vec = XYZ_landmarks[self._landmark_dictionary.index("left elbow")].copy()
+        right_shoulder_landmark = XYZ_landmarks[self._landmark_dictionary.index("right shoulder")].copy() 
+        right_elbow_landmark = XYZ_landmarks[self._landmark_dictionary.index("right elbow")].copy()
+        shoulder_vec = right_elbow_landmark - right_shoulder_landmark
         return shoulder_vec
 
     def _get_elbow_vector(self, XYZ_landmarks):
@@ -181,9 +185,9 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
         Output:
             elbow_vec:
         """
-        wrist_landmark = XYZ_landmarks[self._landmark_dictionary.index("WRIST")].copy()
-        left_elbow_landmark = XYZ_landmarks[self._landmark_dictionary.index("left elbow")].copy()
-        elbow_vec = wrist_landmark - left_elbow_landmark
+        right_wrist_landmark = XYZ_landmarks[self._landmark_dictionary.index("RIGHT_WRIST")].copy()
+        right_elbow_landmark = XYZ_landmarks[self._landmark_dictionary.index("right elbow")].copy()
+        elbow_vec = right_wrist_landmark - right_elbow_landmark
         return elbow_vec
 
     def _get_wrist_vector(self, XYZ_landmarks):
@@ -195,44 +199,13 @@ class LeftArmAngleCalculator(ChainAngleCalculator):
         Output:
             wrist_vec:
         """
-        wrist_landmark = XYZ_landmarks[self._landmark_dictionary.index("WRIST")].copy()
-        index_finger_landmark = XYZ_landmarks[self._landmark_dictionary.index("INDEX_FINGER_MCP")].copy()
-        middle_finger_landmark = XYZ_landmarks[self._landmark_dictionary.index("MIDDLE_FINGER_MCP")].copy()
+        right_wrist_landmark = XYZ_landmarks[self._landmark_dictionary.index("RIGHT_WRIST")].copy()
+        right_index_finger_landmark = XYZ_landmarks[self._landmark_dictionary.index("RIGHT_INDEX_FINGER_MCP")].copy()
+        right_middle_finger_landmark = XYZ_landmarks[self._landmark_dictionary.index("RIGHT_MIDDLE_FINGER_MCP")].copy()
 
-        u_wrist = index_finger_landmark - wrist_landmark
-        v_wrist = middle_finger_landmark - wrist_landmark
+        right_u_wrist = right_index_finger_landmark - right_wrist_landmark
+        right_v_wrist = right_middle_finger_landmark - right_wrist_landmark
 
-        wrist_vec = np.cross(v_wrist, u_wrist)
+        wrist_vec = np.cross(right_u_wrist, right_v_wrist)
         return wrist_vec
-
-    def __call__(self, XYZ_landmarks, parent_coordinate):
-        merged_result_dict = dict()
-        chain_result_dict = self._calculate_chain_angles(XYZ_landmarks, parent_coordinate)
-        left_arm_angles = []
-        left_arm_rot_mats_wrt_origin = []
-        left_arm_rot_mats_wrt_parent = []
-
-        for chain_idx in range(self.num_chain):
-            chain_result = chain_result_dict[f"chain_{chain_idx+1}"] 
-
-            older_brother_angle = chain_result["older_brother_angle"]
-            older_brother_rot_mat_wrt_origin = chain_result["older_brother_rot_mat_wrt_origin"]
-            older_brother_rot_mat_wrt_parent = chain_result["older_brother_rot_mat_wrt_parent"]
-            younger_brother_angle = chain_result["younger_brother_angle"]
-            younger_brother_rot_mat_wrt_origin = chain_result["younger_brother_rot_mat_wrt_origin"]
-            younger_brother_rot_mat_wrt_older_brother = chain_result["younger_brother_rot_mat_wrt_older_brother"]
-            vector_in_current_frame = chain_result["vector_in_current_frame"].copy()
-
-            self._update_vector_in_previous_frame(chain_idx, vector_in_current_frame)
-
-            left_arm_angles.extend([older_brother_angle, younger_brother_angle])
-            left_arm_rot_mats_wrt_origin.extend([older_brother_rot_mat_wrt_origin, younger_brother_rot_mat_wrt_origin])
-            left_arm_rot_mats_wrt_parent.extend([older_brother_rot_mat_wrt_parent, younger_brother_rot_mat_wrt_older_brother])
-
-        merged_result_dict["left_arm"] = {
-            "angles": left_arm_angles,
-            "rot_mats_wrt_origin": left_arm_rot_mats_wrt_origin,
-            "rot_mats_wrt_parent": left_arm_rot_mats_wrt_parent
-        }
-
-        return merged_result_dict
+    

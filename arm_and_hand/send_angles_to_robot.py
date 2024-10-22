@@ -5,11 +5,13 @@ import time
 
 from angle_pid import AnglePID
 from configuration.joints_limit import (
+    head_max_velocity_container, head_max_acce_container,
     left_arm_max_velocity_container, left_arm_max_acce_container,
     right_arm_max_velocity_container, right_arm_max_acce_container,
     left_hand_max_velocity_container, left_hand_max_acce_container
 )
 from configuration.pid_config import (
+    head_joints_pid_config,
     left_arm_joints_pid_config,
     right_arm_joints_pid_config, 
     left_hand_joints_pid_config
@@ -23,10 +25,12 @@ global_timestamp = 0
 FPS = 100
 TIME_SLEEP = 1 / FPS
 
+NUM_HEAD_ANGLES = 2
 NUM_LEFT_ARM_ANGLES = 6
 NUM_RIGHT_ARM_ANGLES = 6
 NUM_LEFT_HAND_ANGLES = 15
 NUM_ANGLES_EACH_FINGER = 3
+#TOTAL_ANGLES = NUM_HEAD_ANGLES + NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES + NUM_LEFT_HAND_ANGLES
 TOTAL_ANGLES = NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES + NUM_LEFT_HAND_ANGLES
 FINGERS_NAME = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"]
 
@@ -95,10 +99,17 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
         if degree:
             next_rad_angles = degree_to_radian(next_angles)
         next_rad_angles = next_rad_angles.tolist() 
+
+        data = {
+            "head": [0, 0],
+            "left_arm": next_rad_angles[:NUM_LEFT_ARM_ANGLES],
+            "right_arm": next_rad_angles[NUM_LEFT_ARM_ANGLES:NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES],
+            "left_fingers": next_rad_angles[NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES:]
+        }
         
-        udp_mess = str(next_rad_angles)
+        udp_mess = str(data)
         CLIENT_SOCKET.sendto(udp_mess.encode(), (SERVER_IP, SERVER_PORT))
 
-        #print(udp_mess)
+        print(udp_mess)
 
         time.sleep(TIME_SLEEP)

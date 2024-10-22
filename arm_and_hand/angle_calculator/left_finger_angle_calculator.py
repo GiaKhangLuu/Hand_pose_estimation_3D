@@ -43,7 +43,7 @@ Which:
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-from chain_angle_calculator import ChainAngleCalculator
+from .chain_angle_calculator import ChainAngleCalculator
 
 mcp_vector_in_init_frame = None
 pip_vector_in_init_frame = None

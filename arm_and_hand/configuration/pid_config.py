@@ -1,3 +1,25 @@
+# ------------ HEAD --------------
+head_j1_Kp = 40
+head_j1_Ki = 70
+head_j1_Kd = 15
+
+head_j2_Kp = 40
+head_j2_Ki = 70
+head_j2_Kd = 15
+
+head_joints_pid_config = {
+    "joint1": {
+        "Kp": head_j1_Kp,
+        "Ki": head_j1_Ki,
+        "Kd": head_j1_Kd
+    },
+    "joint2": {
+        "Kp": head_j2_Kp,
+        "Ki": head_j2_Ki,
+        "Kd": head_j2_Kd
+    }
+}
+
 # ------------ LEFT ARM --------------
 left_arm_j1_Kp = 30
 left_arm_j1_Ki = 70

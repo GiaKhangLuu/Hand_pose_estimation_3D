@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from angle_calculation_utilities import calculate_the_next_two_joints_angle
+from .angle_calculation_utilities import calculate_the_next_two_joints_angle
 
 NUM_ANGLES_EACH_CHAIN = 2
 

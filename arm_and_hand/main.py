@@ -40,13 +40,19 @@ from send_angles_to_robot import send_angles_to_robot_using_pid
 from landmarks_detectors import LandmarksDetectors
 from landmarks_fuser import LandmarksFuser
 from angle_noise_reducer import AngleNoiseReducer
-from left_arm_angle_calculator import LeftArmAngleCalculator
-from right_arm_angle_calculator import RightArmAngleCalculator
-from left_hand_angle_calculator import LeftHandAngleCalculator
+from angle_calculator import (
+    HeadAngleCalculator,
+    LeftArmAngleCalculator,
+    RightArmAngleCalculator,
+    LeftHandAngleCalculator
+)
 
 # ------------------- READ CONFIG ------------------- 
-config_file_path = os.path.join(CURRENT_DIR, "configuration", "main_conf.yaml") 
-config = load_config(config_file_path)
+MAIN_CONFIG_FILE_PATH = os.path.join(CURRENT_DIR, "configuration", "main_conf.yaml") 
+config = load_config(MAIN_CONFIG_FILE_PATH)
+
+DETECTION_CONFIG_FILE_PATH = os.path.join(CURRENT_DIR, "configuration", "detection_config.yaml")
+detection_config = load_config(DETECTION_CONFIG_FILE_PATH)
 
 left_oak_mxid = config["camera"]["left_camera"]["mxid"]
 left_cam_calib_path = config["camera"]["left_camera"]["left_camera_calibration_path"]
@@ -66,14 +72,19 @@ save_images = config["utilities"]["save_images"]
 save_left_arm_angles = config["utilities"]["save_left_arm_angles"]
 save_right_arm_angles = config["utilities"]["save_right_arm_angles"]
 save_left_hand_angles = config["utilities"]["save_left_hand_angles"]
+is_head_fused = config["utilities"]["fusing_head"]
 is_left_arm_fused = config["utilities"]["fusing_left_arm"]
 is_left_hand_fused = config["utilities"]["fusing_left_hand"]
 is_right_arm_fused = config["utilities"]["fusing_right_arm"]
 is_right_hand_fused = config["utilities"]["fusing_right_hand"]
 
-detection_model_selection_id = config["detection_phase"]["model_selection_id"]
-detection_model_list = tuple(config["detection_phase"]["model_list"])
-arm_hand_fused_names = config["detection_phase"]["fusing_landmark_dictionary"]
+detection_model_selection_id = detection_config["model_selection_id"]
+detection_model_list = tuple(detection_config["model_list"])
+
+head_fused_names = config["fusing_head_landmark_dictionary"]
+arm_hand_fused_names = config["fusing_body_landmark_dictionary"]
+fusing_landmark_dictionary = arm_hand_fused_names.copy()
+fusing_landmark_dictionary.extend(head_fused_names)
 
 fusing_enable = config["fusing_phase"]["enable"]
 fusing_method_list = tuple(config["fusing_phase"]["fusing_methods"])
@@ -123,9 +134,12 @@ if is_right_hand_fused:
                                     "RIGHT_RING_FINGER_MCP", "RIGHT_RING_FINGER_PIP", "RIGHT_RING_FINGER_DIP", "RIGHT_RING_FINGER_TIP",    
                                     "RIGHT_PINKY_MCP", "RIGHT_PINKY_PIP", "RIGHT_PINKY_DIP", "RIGHT_PINKY_TIP"]
     LANDMARKS_TO_FUSED.extend(RIGHT_HAND_LANDMARKS_TO_FUSED)
+if is_head_fused:
+    HEAD_LANDMARKS_TO_FUSED = ["nose", "left eye", "right eye", "left ear", "right ear"]
+    LANDMARKS_TO_FUSED.extend(HEAD_LANDMARKS_TO_FUSED)
             
 for landmark_name in LANDMARKS_TO_FUSED:
-    LANDMARKS_TO_FUSED_IDX.append(arm_hand_fused_names.index(landmark_name)) 
+    LANDMARKS_TO_FUSED_IDX.append(fusing_landmark_dictionary.index(landmark_name)) 
 
 if run_to_collect_data:
     plot_3d = True
@@ -157,8 +171,11 @@ arm_points_vis_queue = queue.Queue()  # This queue stores fused arm landmarks to
 hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks to visualize by open3d 
 TARGET_LEFT_ARM_HAND_ANGLES_QUEUE = queue.Queue()  # This queue stores target angles 
 
-landmarks_detectors = LandmarksDetectors(detection_model_selection_id, 
-    detection_model_list, config["detection_phase"], draw_landmarks)
+landmarks_detectors = LandmarksDetectors(
+    model_selected_id=detection_model_selection_id, 
+    model_list=detection_model_list, 
+    model_config=detection_config, 
+    draw_landmarks=draw_landmarks)
 landmarks_fuser = LandmarksFuser(
     method_selected_id=fusing_method_selection_id,
     method_list=fusing_method_list, 
@@ -172,43 +189,72 @@ if enable_right_arm_angles_noise_reducer:
     right_arm_angle_noise_reducer = AngleNoiseReducer(
         angles_noise_statistical_file=right_arm_angles_noise_statistical_file,
         dim=right_arm_angles_noise_reducer_dim)
-left_arm_angle_calculator = LeftArmAngleCalculator(num_chain=3, landmark_dictionary=arm_hand_fused_names)
-right_arm_angle_calculator = RightArmAngleCalculator(num_chain=3, landmark_dictionary=arm_hand_fused_names)
-left_hand_angle_calculator = LeftHandAngleCalculator(num_chain=2, landmark_dictionary=arm_hand_fused_names)
+
+head_angle_calculator = HeadAngleCalculator(num_chain=1, landmark_dictionary=fusing_landmark_dictionary)
+left_arm_angle_calculator = LeftArmAngleCalculator(num_chain=3, landmark_dictionary=fusing_landmark_dictionary)
+right_arm_angle_calculator = RightArmAngleCalculator(num_chain=3, landmark_dictionary=fusing_landmark_dictionary)
+left_hand_angle_calculator = LeftHandAngleCalculator(num_chain=2, landmark_dictionary=fusing_landmark_dictionary)
+
+DATA_DIR = None
+LANDMARK_CSV_PATH = None
+IMAGE_DIR = None
+LEFT_ARM_ANGLE_CSV_PATH = None
+RIGHT_ARM_ANGLE_CSV_PATH = None
+LEFT_HAND_ANGLE_CSV_PATH = None
+
+def create_files(save_landmarks, save_images, save_left_arm_angles,
+    save_right_arm_angles, save_left_hand_angles):
+    global DATA_DIR
+    global LANDMARK_CSV_PATH
+    global IMAGE_DIR
+    global LEFT_ARM_ANGLE_CSV_PATH
+    global RIGHT_ARM_ANGLE_CSV_PATH
+    global LEFT_HAND_ANGLE_CSV_PATH
+
+    current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    DATA_DIR = os.path.join(CURRENT_DIR, "../..", "data", current_date)
+    if not os.path.exists(DATA_DIR):
+        os.mkdir(DATA_DIR)
+    DATA_DIR = os.path.join(DATA_DIR, current_time)
+    os.mkdir(DATA_DIR)
+        
+    if save_landmarks:
+        LANDMARK_CSV_PATH = os.path.join(DATA_DIR, "landmarks_all_{}.csv".format(current_time))
+        create_csv(LANDMARK_CSV_PATH, fusion_csv_columns_name)
+
+    if save_images:
+        IMAGE_DIR = os.path.join(DATA_DIR, "image") 
+        os.mkdir(IMAGE_DIR)
+
+    if save_left_arm_angles:
+        LEFT_ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_arm_angle_{}.csv".format(current_time))
+        create_csv(LEFT_ARM_ANGLE_CSV_PATH, left_arm_angles_name)
+            
+    if save_right_arm_angles:
+        RIGHT_ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "right_arm_angle_{}.csv".format(current_time))
+        create_csv(RIGHT_ARM_ANGLE_CSV_PATH, right_arm_angles_name)
+            
+    if save_left_hand_angles:
+        LEFT_HAND_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_hand_angle_{}.csv".format(current_time))
+        create_csv(LEFT_HAND_ANGLE_CSV_PATH, left_hand_angles_name)
 
 if __name__ == "__main__":
-    if (save_landmarks or
-        save_left_arm_angles or
-        save_right_arm_angles or 
+
+    create_dir = (save_landmarks or 
+        save_left_arm_angles or 
+        save_right_arm_angles or
         save_left_hand_angles or
-        save_images):
-        current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        DATA_DIR = os.path.join(CURRENT_DIR, "../..", "data", current_date)
-        if not os.path.exists(DATA_DIR):
-            os.mkdir(DATA_DIR)
-        DATA_DIR = os.path.join(DATA_DIR, current_time)
-        os.mkdir(DATA_DIR)
-        
-        if save_landmarks:
-            LANDMARK_CSV_PATH = os.path.join(DATA_DIR, "landmarks_all_{}.csv".format(current_time))
-            create_csv(LANDMARK_CSV_PATH, fusion_csv_columns_name)
+        save_images)
 
-        if save_images:
-            IMAGE_DIR = os.path.join(DATA_DIR, "image") 
-            os.mkdir(IMAGE_DIR)
-
-        if save_left_arm_angles:
-            LEFT_ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_arm_angle_{}.csv".format(current_time))
-            create_csv(LEFT_ARM_ANGLE_CSV_PATH, left_arm_angles_name)
-            
-        if save_right_arm_angles:
-            RIGHT_ARM_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "right_arm_angle_{}.csv".format(current_time))
-            create_csv(RIGHT_ARM_ANGLE_CSV_PATH, right_arm_angles_name)
-            
-        if save_left_hand_angles:
-            LEFT_HAND_ANGLE_CSV_PATH = os.path.join(DATA_DIR, "left_hand_angle_{}.csv".format(current_time))
-            create_csv(LEFT_HAND_ANGLE_CSV_PATH, left_hand_angles_name)
+    if create_dir:
+        create_files(
+            save_landmarks=save_landmarks, 
+            save_images=save_images,
+            save_left_arm_angles=save_left_arm_angles,
+            save_right_arm_angles=save_right_arm_angles, 
+            save_left_hand_angles=save_left_hand_angles
+        )
 
     pipeline_left_oak = initialize_oak_cam()
     pipeline_right_oak = initialize_oak_cam()
@@ -229,7 +275,7 @@ if __name__ == "__main__":
     if plot_3d:
         vis_arm_thread = threading.Thread(target=visualize_sticky_man,
             args=(arm_points_vis_queue, 
-                arm_hand_fused_names,
+                fusing_landmark_dictionary,
                 LANDMARKS_TO_FUSED_IDX,
                 left_arm_angle_calculator,
                 left_hand_angle_calculator,
@@ -238,6 +284,7 @@ if __name__ == "__main__":
                 draw_left_hand_coordinates,
                 joint_vector_color,
                 ref_vector_color,
+                is_head_fused,
                 is_left_arm_fused,
                 is_left_hand_fused,
                 is_right_arm_fused,
@@ -248,6 +295,7 @@ if __name__ == "__main__":
     timestamp = 0
     frame_count = 0
     num_img_save = 0
+    every_1k_timestamp = 1
     start_time = time.time()
     fps = 0
 
@@ -280,7 +328,7 @@ if __name__ == "__main__":
         if (fusing_enable and
             left_camera_body_landmarks_xyZ is not None and 
             right_camera_body_landmarks_xyZ is not None and
-            left_camera_body_landmarks_xyZ.shape[0] == len(arm_hand_fused_names) and
+            left_camera_body_landmarks_xyZ.shape[0] == len(fusing_landmark_dictionary) and
             left_camera_body_landmarks_xyZ.shape[0] == right_camera_body_landmarks_xyZ.shape[0]):
             
             left_xyZ_to_fused = np.zeros_like(left_camera_body_landmarks_xyZ, dtype=np.float64)
@@ -298,10 +346,17 @@ if __name__ == "__main__":
 
             arm_hand_XYZ_wrt_left_shoulder, xyz_origin = convert_to_left_shoulder_coord(
                 arm_hand_fused_XYZ,
-                arm_hand_fused_names)
+                fusing_landmark_dictionary)
             
             if (arm_hand_XYZ_wrt_left_shoulder is not None and
                 xyz_origin is not None):
+
+                if is_head_fused:
+                    head_result = head_angle_calculator(arm_hand_XYZ_wrt_left_shoulder,
+                        parent_coordinate=xyz_origin)
+                    head_angles = head_result["head"]["angles"]
+                else:
+                    head_angles = [0] * 2
 
                 if is_left_arm_fused:
                     left_arm_result = left_arm_angle_calculator(arm_hand_XYZ_wrt_left_shoulder, 
@@ -360,7 +415,8 @@ if __name__ == "__main__":
                     left_hand_angles = raw_left_hand_angles = smooth_left_hand_angles = [0] * 15
                     
                 succeed_in_fusing_landmarks = True
-                
+
+                head_angles_to_send = np.array(head_angles) 
                 left_arm_angles_to_send = np.array(left_arm_angles)
                 right_arm_angles_to_send = np.array(right_arm_angles)
                 left_hand_angles_to_send = np.array(left_hand_angles)
@@ -381,11 +437,11 @@ if __name__ == "__main__":
                         arm_points_vis_queue.get()
 
                 if save_landmarks and timestamp > 100:  # warm up for 100 frames before saving landmarks
-                    output_landmarks = np.concatenate([arm_hand_fused_XYZ, 
-                        np.zeros((48 - arm_hand_fused_XYZ.shape[0], 3))])
+                    left_input = left_camera_body_landmarks_xyZ[:48]
+                    right_input = right_camera_body_landmarks_xyZ[:48]
                     input_row = flatten_two_camera_input(
-                        left_camera_landmarks_xyZ=left_camera_body_landmarks_xyZ,
-                        right_camera_landmarks_xyZ=right_camera_body_landmarks_xyZ,
+                        left_camera_landmarks_xyZ=left_input,
+                        right_camera_landmarks_xyZ=right_input,
                         left_camera_intr=left_camera_intr,
                         right_camera_intr=right_camera_intr,
                         right_2_left_matrix=right_2_left_mat_avg,
@@ -393,7 +449,7 @@ if __name__ == "__main__":
                         frame_calibrated_size=frame_calibrated_size[::-1], 
                         mode="ground_truth",
                         timestamp=timestamp,
-                        output_landmarks=output_landmarks)
+                        output_landmarks=arm_hand_fused_XYZ)
                     append_to_csv(LANDMARK_CSV_PATH, input_row)
             
         if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
@@ -439,6 +495,19 @@ if __name__ == "__main__":
             append_to_csv(LEFT_HAND_ANGLE_CSV_PATH, row_left_hand_angles_writed_to_file)
 
         timestamp += 1
+        
+        # If timestamp 
+        if timestamp // 1000 >= every_1k_timestamp and create_dir:
+            every_1k_timestamp += 1
+            create_files(
+                save_landmarks=save_landmarks, 
+                save_images=save_images,
+                save_left_arm_angles=save_left_arm_angles,
+                save_right_arm_angles=save_right_arm_angles, 
+                save_left_hand_angles=save_left_hand_angles
+            )
+            if save_landmarks:
+                split_train_test_val(LANDMARK_CSV_PATH)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             cv2.destroyAllWindows()
