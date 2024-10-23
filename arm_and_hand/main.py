@@ -355,6 +355,7 @@ if __name__ == "__main__":
                     head_result = head_angle_calculator(arm_hand_XYZ_wrt_left_shoulder,
                         parent_coordinate=xyz_origin)
                     head_angles = head_result["head"]["angles"]
+                    print(head_angles)
                 else:
                     head_angles = [0] * 2
 
@@ -420,11 +421,14 @@ if __name__ == "__main__":
                 left_arm_angles_to_send = np.array(left_arm_angles)
                 right_arm_angles_to_send = np.array(right_arm_angles)
                 left_hand_angles_to_send = np.array(left_hand_angles)
-                
-                angles_sent_to_robot = np.concatenate([left_arm_angles_to_send, 
-                    right_arm_angles_to_send,                                                       
-                    left_hand_angles_to_send])
 
+                angles_sent_to_robot = {
+                    "head": head_angles_to_send,
+                    "left_arm": left_arm_angles_to_send,
+                    "right_arm": right_arm_angles_to_send,
+                    "left_fingers": left_hand_angles_to_send
+                }
+                
                 if send_udp:
                     TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.put((angles_sent_to_robot, timestamp))
                     if TARGET_LEFT_ARM_HAND_ANGLES_QUEUE.qsize() > 1:

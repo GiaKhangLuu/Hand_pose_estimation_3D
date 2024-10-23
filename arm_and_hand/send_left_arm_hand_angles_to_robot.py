@@ -85,6 +85,6 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
         udp_mess = str(next_rad_angles)
         CLIENT_SOCKET.sendto(udp_mess.encode(), (SERVER_IP, SERVER_PORT))
 
-        print(udp_mess)
+        #print(udp_mess)
 
         time.sleep(TIME_SLEEP)

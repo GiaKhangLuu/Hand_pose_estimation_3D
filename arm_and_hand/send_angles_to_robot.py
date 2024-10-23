@@ -34,7 +34,40 @@ NUM_ANGLES_EACH_FINGER = 3
 TOTAL_ANGLES = NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES + NUM_LEFT_HAND_ANGLES
 FINGERS_NAME = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"]
 
-current_angles = np.array([0] * TOTAL_ANGLES, dtype=np.float64)
+VELOCITY_MANAGER = {
+    "head": head_max_velocity_container,
+    "left_arm": left_arm_max_velocity_container,
+    "right_arm": right_arm_max_velocity_container,
+    "left_fingers": left_hand_max_velocity_container
+}
+
+ACCELERATION_MANAGER = {
+    "head": head_max_acce_container,
+    "left_arm": left_arm_max_acce_container,
+    "right_arm": right_arm_max_acce_container,
+    "left_fingers": left_hand_max_acce_container
+}
+
+PID_CONFIG_MANAGER = {
+    "head": head_joints_pid_config,
+    "left_arm": left_arm_joints_pid_config,
+    "right_arm": right_arm_joints_pid_config,
+    "left_fingers": left_hand_joints_pid_config
+}
+
+pid_manager = {
+    "head": [None] * NUM_HEAD_ANGLES,
+    "left_arm": [None] * NUM_LEFT_ARM_ANGLES,
+    "right_arm": [None] * NUM_RIGHT_ARM_ANGLES,
+    "left_fingers": [None] * NUM_LEFT_HAND_ANGLES
+}
+
+current_angles_for_parts = {
+    "head": np.zeros(NUM_HEAD_ANGLES, dtype=np.float64),
+    "left_arm": np.zeros(NUM_LEFT_ARM_ANGLES, dtype=np.float64),
+    "right_arm": np.zeros(NUM_RIGHT_ARM_ANGLES, dtype=np.float64),
+    "left_fingers": np.zeros(NUM_LEFT_HAND_ANGLES, dtype=np.float64)
+}
 
 def degree_to_radian(degree):
     radian = degree * math.pi / 180 
@@ -46,70 +79,65 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
     As convention, our publish data should be: [*left_arm_angles, *right_arm_angles, *left_hand_angles, *right_hand_angles]
     """
     
-    global current_angles 
+    global current_angles_for_parts 
     global global_timestamp
-    
-    pid_manager = [None] * TOTAL_ANGLES
-    for angle_idx in range(TOTAL_ANGLES):
-        if angle_idx < NUM_LEFT_ARM_ANGLES:
-            pid_conf = left_arm_joints_pid_config["joint{}".format(angle_idx + 1)]
-            v_max = left_arm_max_velocity_container[angle_idx]
-            a_max = left_arm_max_acce_container[angle_idx]
-        elif NUM_LEFT_ARM_ANGLES <= angle_idx < NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES:
-            right_arm_joint_i = angle_idx - NUM_LEFT_ARM_ANGLES
-            pid_conf = right_arm_joints_pid_config["joint{}".format(right_arm_joint_i + 1)]
-            v_max = right_arm_max_velocity_container[right_arm_joint_i]
-            a_max = right_arm_max_acce_container[right_arm_joint_i]
-        elif NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES <= angle_idx < TOTAL_ANGLES:
-            temp = angle_idx - (NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES)
-            finger_idx = temp // NUM_ANGLES_EACH_FINGER
-            joint_idx = temp % NUM_ANGLES_EACH_FINGER
-            pid_conf = left_hand_joints_pid_config[FINGERS_NAME[finger_idx]]["joint{}".format(joint_idx + 1)]
-            left_hand_velo_acc_idx = joint_idx + (NUM_ANGLES_EACH_FINGER * finger_idx)         
-            v_max = left_hand_max_velocity_container[left_hand_velo_acc_idx]
-            a_max = left_hand_max_acce_container[left_hand_velo_acc_idx]
-        else:
-            return None
-        setpoint = current_angles[angle_idx]
-        pid = AnglePID(Kp=pid_conf["Kp"], Ki=pid_conf["Ki"], Kd=pid_conf["Kd"],
-            setpoint=setpoint, v_max=v_max, a_max=a_max, dt=TIME_SLEEP)
-        pid_manager[angle_idx] = pid     
-    
+
+    for part in pid_manager.keys():
+        for joint_i in range(len(pid_manager[part])):
+            v_max = VELOCITY_MANAGER[part][joint_i]
+            a_max = ACCELERATION_MANAGER[part][joint_i]
+            setpoint = current_angles_for_parts[part][joint_i]
+            if part != "left_fingers":
+                pid_conf = PID_CONFIG_MANAGER[part]["joint{}".format(joint_i + 1)]
+            else:
+                finger_i = joint_i // NUM_ANGLES_EACH_FINGER
+                joint_of_finger_i = joint_i % NUM_ANGLES_EACH_FINGER
+                pid_conf = PID_CONFIG_MANAGER[part][FINGERS_NAME[finger_i]]["joint{}".format(joint_of_finger_i + 1)]
+            pid_manager[part][joint_i] = AnglePID(
+                Kp=pid_conf["Kp"],
+                Ki=pid_conf["Ki"],
+                Kd=pid_conf["Kd"],
+                setpoint=setpoint,
+                v_max=v_max,
+                a_max=a_max, 
+                dt=TIME_SLEEP
+            )
+
     start_time = time.time() 
     while True:
         if not target_angles_queue.empty():
             target_angles, timestamp = target_angles_queue.get()
             global_timestamp = timestamp
-            for i in range(TOTAL_ANGLES):
-                pid_manager[i].update_setpoint(target_angles[i])
-                
-        next_angles = np.zeros_like(current_angles, dtype=np.float64)
-        for i in range(TOTAL_ANGLES):
-            angle_pid = pid_manager[i]
-            ji_current_angle = current_angles[i]
-            ji_next_angle, _ = angle_pid.update(ji_current_angle)
-            next_angles[i] = ji_next_angle
+
+            for part in pid_manager.keys():
+                for joint_i in range(len(pid_manager[part])):
+                    target_angle = target_angles[part][joint_i]
+                    pid_manager[part][joint_i].update_setpoint(target_angle)
+
+        next_angles_for_parts = dict()
+        for part in pid_manager.keys():
+            next_angles_for_parts[part] = np.zeros(len(pid_manager[part]), dtype=np.float64)
+            for joint_i in range(len(pid_manager[part])):
+                angle_pid = pid_manager[part][joint_i]
+                ji_curr_angle = current_angles_for_parts[part][joint_i]
+                ji_next_angle, _ = angle_pid.update(ji_curr_angle)
+                next_angles_for_parts[part][joint_i] = ji_next_angle
             
-        current_angles = next_angles.copy()
-        
+        current_angles_for_parts = next_angles_for_parts.copy()
+
         end_time = time.time()
         delta_t = end_time - start_time
         start_time = end_time
-        
-        if degree:
-            next_rad_angles = degree_to_radian(next_angles)
-        next_rad_angles = next_rad_angles.tolist() 
 
-        data = {
-            "head": [0, 0],
-            "left_arm": next_rad_angles[:NUM_LEFT_ARM_ANGLES],
-            "right_arm": next_rad_angles[NUM_LEFT_ARM_ANGLES:NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES],
-            "left_fingers": next_rad_angles[NUM_LEFT_ARM_ANGLES + NUM_RIGHT_ARM_ANGLES:]
-        }
-        
-        udp_mess = str(data)
+        current_rad_angles_for_parts = current_angles_for_parts.copy() 
+        if degree:
+            for part in current_angles_for_parts.keys():
+                current_rad_angles_for_parts[part] = degree_to_radian(current_angles_for_parts[part].copy())
+                current_rad_angles_for_parts[part] = current_rad_angles_for_parts[part].tolist()
+
+        udp_mess = str(current_rad_angles_for_parts)
         CLIENT_SOCKET.sendto(udp_mess.encode(), (SERVER_IP, SERVER_PORT))
 
-        print(udp_mess)
+        #print(udp_mess)
 
         time.sleep(TIME_SLEEP)

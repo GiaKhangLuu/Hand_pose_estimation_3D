@@ -9,7 +9,7 @@ rotation_matrix_for_eye = R.from_euler("xz", [90, 90], degrees=True).as_matrix()
 STATIC_BOUND = 1
 joint1_min = -57 
 joint1_max = 57
-joint2_min = -6
+joint2_min = -20
 joint2_max = 66
 
 class HeadAngleCalculator(ChainAngleCalculator):
@@ -43,7 +43,7 @@ class HeadAngleCalculator(ChainAngleCalculator):
         ]
         self.calculate_second_angle_flag_container = [True]
         self._clip_angle_of_two_joints_flag_container = [
-            [True, False],
+            [True, True],
         ]
 
         super().__init__(num_chain, landmark_dictionary)
@@ -67,7 +67,7 @@ class HeadAngleCalculator(ChainAngleCalculator):
         Output:
             tomospc_angle_j2 (float):
         """
-        tomospc_angle_j2 = -joint2_angle
+        tomospc_angle_j2 = -joint2_angle + 30  # offset =))
         return tomospc_angle_j2
 
     def _get_landmark_vector(self, chain_idx, XYZ_landmarks):

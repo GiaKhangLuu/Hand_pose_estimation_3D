@@ -119,11 +119,11 @@ process_frame:
 utilities:
   draw_landmarks: true       # Draw landmarks on rgb image
   plot_3d: true              # Plot the hand landmarks on open3d
-  save_left_arm_angles: true
+  save_left_arm_angles: false
   save_right_arm_angles: false
-  save_left_hand_angles: true
-  save_landmarks: true      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
-  save_images: true
+  save_left_hand_angles: false
+  save_landmarks: false      # Write landmarks to to file, save_landmarks must be runned with manual computation (dont use neural net.) for better ground truth
+  save_images: false
   fusing_head: true
   fusing_left_arm: true
   fusing_left_hand: true
