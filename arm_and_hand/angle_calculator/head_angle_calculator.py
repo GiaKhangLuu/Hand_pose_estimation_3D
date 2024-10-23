@@ -9,7 +9,7 @@ rotation_matrix_for_eye = R.from_euler("xz", [90, 90], degrees=True).as_matrix()
 STATIC_BOUND = 1
 joint1_min = -57 
 joint1_max = 57
-joint2_min = -20
+joint2_min = -30
 joint2_max = 66
 
 class HeadAngleCalculator(ChainAngleCalculator):
