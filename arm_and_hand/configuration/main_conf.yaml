@@ -62,7 +62,7 @@ fusing_phase:
     - transformer_encoder
     - minimize_distance
     - ann
-  enable: true
+  enable: false
   fusing_selection_id: 1
   transformer_encoder: 
     sequence_length: 5

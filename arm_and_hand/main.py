@@ -355,7 +355,7 @@ if __name__ == "__main__":
                     head_result = head_angle_calculator(arm_hand_XYZ_wrt_left_shoulder,
                         parent_coordinate=xyz_origin)
                     head_angles = head_result["head"]["angles"]
-                    print(head_angles)
+                    #print(head_angles)
                 else:
                     head_angles = [0] * 2
 

@@ -78,11 +78,11 @@ mediapipe:
       - right foot index
 mmpose:
   convert_color_channel: false
-  landmark_thresh: 0.7
+  landmark_thresh: 0.5
   person_detection:
     is_enable: true
     person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
-    person_detector_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_weight.pth
+    person_detector_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmdet-trt/rtmdet_nano
   pose_estimation:
     is_enable: true
     # ---- RTMPOSE-T ----
@@ -97,9 +97,9 @@ mmpose:
     #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_right_cam_best_epoch480_weight.pth
     # ---- RTMPOSE-M ----
     left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-    left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241022_left_cam_best_epoch300_weight.pth
+    left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose-m/rtmpose-m_left_cam
     right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-    right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241022_right_cam_best_epoch280_weight.pth
+    right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose-m/rtmpose-m_right_cam
   selected_landmarks_idx:
     - 5 
     - 7 
