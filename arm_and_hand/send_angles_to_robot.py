@@ -18,7 +18,7 @@ from configuration.pid_config import (
 )
 
 CLIENT_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-SERVER_IP = "192.168.0.155"
+SERVER_IP = "192.168.0.190"
 SERVER_PORT = 12345
 global_timestamp = 0
 

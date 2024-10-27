@@ -37,7 +37,8 @@ from common import (load_data_from_npz_file,
     load_config, 
     scale_intrinsic_by_res)
 from send_angles_to_robot import send_angles_to_robot_using_pid
-from landmarks_detectors import LandmarksDetectors
+#from landmarks_detectors import LandmarksDetectors
+from landmark_detector import RTMPoseDetector_BothSides
 from landmarks_fuser import LandmarksFuser
 from angle_noise_reducer import AngleNoiseReducer
 from angle_calculator import (
@@ -171,10 +172,8 @@ arm_points_vis_queue = queue.Queue()  # This queue stores fused arm landmarks to
 hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks to visualize by open3d 
 TARGET_LEFT_ARM_HAND_ANGLES_QUEUE = queue.Queue()  # This queue stores target angles 
 
-landmarks_detectors = LandmarksDetectors(
-    model_selected_id=detection_model_selection_id, 
-    model_list=detection_model_list, 
-    model_config=detection_config, 
+landmarks_detectors = RTMPoseDetector_BothSides(
+    model_config=detection_config["mmpose"],
     draw_landmarks=draw_landmarks)
 landmarks_fuser = LandmarksFuser(
     method_selected_id=fusing_method_selection_id,
@@ -315,14 +314,20 @@ if __name__ == "__main__":
         right_image_to_save = np.copy(right_rgb)
 
         # Detection phase
-        left_det_rs = landmarks_detectors.detect(left_rgb, left_depth, timestamp, side="left")
-        right_det_rs = landmarks_detectors.detect(right_rgb, right_depth, timestamp, side="right")
+        detection_input = {
+            "left_cam_rgb": left_rgb,
+            "left_cam_depth": left_depth,
+            "right_cam_rgb":right_rgb,
+            "right_cam_depth": right_depth,
+        } 
 
-        left_camera_body_landmarks_xyZ = left_det_rs["detection_result"]
-        right_camera_body_landmarks_xyZ = right_det_rs["detection_result"]
+        detection_result = landmarks_detectors(detection_input)
+
+        left_camera_body_landmarks_xyZ = detection_result["left_cam_detection_result"]
+        right_camera_body_landmarks_xyZ = detection_result["right_cam_detection_result"]
         if draw_landmarks:
-            left_rgb = left_det_rs["drawed_img"]
-            right_rgb = right_det_rs["drawed_img"]
+            left_rgb = detection_result["left_cam_drawed_img"]
+            right_rgb = detection_result["right_cam_drawed_img"]
 
         # Fusing phase
         if (fusing_enable and
@@ -453,7 +458,7 @@ if __name__ == "__main__":
                         frame_calibrated_size=frame_calibrated_size[::-1], 
                         mode="ground_truth",
                         timestamp=timestamp,
-                        output_landmarks=arm_hand_fused_XYZ)
+                        output_landmarks=arm_hand_fused_XYZ[:48])
                     append_to_csv(LANDMARK_CSV_PATH, input_row)
             
         if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
