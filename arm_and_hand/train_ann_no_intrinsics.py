@@ -60,8 +60,7 @@ def train_model(model,
     writer=None,
     log_seq=100,
     weight_idx=None,
-    weight=None,
-    train_left_arm_hand_only=True):
+    weight=None):
     best_val_loss = float('inf')
     train_losses = []
     val_losses = []
@@ -73,12 +72,9 @@ def train_model(model,
         for inputs, targets in train_dataloader:
             inputs = inputs.to("cuda")
             targets = targets.to("cuda")
-            outputs = model(inputs)  # shape: (B, 144), B = batch_size, 144 = output_dim
+            outputs = model(inputs)  # shape: (B, 126), B = batch_size, 126 = 21 * 3 * 2 (21 hand joints)
             outputs = outputs.reshape(-1, 3, 21)  # shape: (B, 3, 44). For now, we use fused thumb as input => already removed thumb in output nodes
             targets = targets.reshape(-1, 3, 21)
-            if train_left_arm_hand_only:
-                targets = targets[..., :26]
-                outputs = outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
             
             elementwise_loss = F.mse_loss(outputs, targets, reduction='none')
             if weight_idx:
@@ -104,9 +100,6 @@ def train_model(model,
                 val_outputs = model(val_inputs)
                 val_outputs = val_outputs.reshape(-1, 3, 21)  # shape: (B, 3, 48)
                 val_targets = val_targets.reshape(-1, 3, 21)
-                if train_left_arm_hand_only:
-                    val_outputs = val_outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
-                    val_targets = val_targets[..., :26]
                 
                 val_batch_elementwise_loss = F.mse_loss(val_outputs, val_targets, reduction='none')
                 if weight_idx:
