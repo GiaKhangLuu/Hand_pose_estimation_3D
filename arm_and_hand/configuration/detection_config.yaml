@@ -78,28 +78,27 @@ mediapipe:
       - right foot index
 mmpose:
   convert_color_channel: false
-  landmark_thresh: 0.7
+  landmark_thresh: 0.5
   person_detection:
     is_enable: true
     person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
-    person_detector_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_weight.pth
+    person_detector_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmdet-trt/rtmdet_nano
   pose_estimation:
     is_enable: true
-    # ---- RTMPOSE-T ----
-    #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/pretrained_rtmpose-t_config.py
-    #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/20240928_left_cam_best_epoch1000_weight.pth
-    #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/pretrained_rtmpose-t_config.py
-    #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_t/20240928_right_cam_best_epoch900_weight.pth
-    # ---- RTMPOSE-S ----
-    #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-    #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_left_cam_best_epoch380_weight.pth
-    #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/pretrained_rtmpose-s_config.py
-    #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_s/20240927_right_cam_best_epoch480_weight.pth
     # ---- RTMPOSE-M ----
-    left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-    left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241022_left_cam_best_epoch300_weight.pth
-    right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-    right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/20241022_right_cam_best_epoch280_weight.pth
+    #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+    #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m/rtmpose_m_left_cam
+    #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
+    #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m/rtmpose_m_right_cam
+    # ---- RTMPOSE-L ----
+    #pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_l/pretrained_rtmpose_l_config.py
+    #pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_l/rtmpose_l_both_sides
+    # ---- RTMPOSE-M PRIME----
+    #pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m_prime/pretrained_rtmpose_m_prime_config.py
+    #pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m_prime/rtmpose_m_prime_both_sides
+    # ---- RTMPOSE-M PRIME DEMO----
+    pose_estimator_config: /home/giakhang/Desktop/ckpt/pretrained_rtmpose_m_prime_config.py
+    pose_estimator_weight: /home/giakhang/Desktop/ckpt/rtmpose_m_prime_both_sides
   selected_landmarks_idx:
     - 5 
     - 7 

@@ -17,6 +17,7 @@ from sklearn.preprocessing import MinMaxScaler
 from csv_writer import columns_to_normalize, fusion_csv_columns_name
 import pandas as pd
 import joblib
+import numpy as np
 
 from landmarks_scaler import LandmarksScaler
 
@@ -49,6 +50,58 @@ class EarlyStopping:
         if self.verbose:
             print(f'Saved model with validation loss: {val_loss:.4f}')
 
+def custom_loss_function(pred, gt):
+    """
+    This loss function tries to minimize the distance of 
+    the fingers. 
+    Args:
+        pred: (N, 63)
+        gt: (N, 63)
+    Output:
+        loss: (1,)
+    """
+
+    pred = pred.reshape(-1, 3, 21)
+    gt = gt.reshape(-1, 3, 21)
+
+    pred_wrist = pred[..., 0]  # assume that wrist is in the first position
+    gt_wrist = gt[..., 0]  # (N, 3)
+
+    pred_fingers = pred[..., 1:]  # (N, 3, 20)
+    gt_fingers = gt[..., 1:]  # (N, 3, 20)
+
+    pred_fingers = pred_fingers.reshape(-1, 3, 5, 4)  # (N, 3, 5, 4)
+    gt_fingers = gt_fingers.reshape(-1, 3, 5, 4)  # (N, 3, 5, 4)
+
+    pred_wrist = pred_wrist[..., None]  # (N, 3, 1)
+    pred_wrist = pred_wrist.repeat_interleave(5, -1)  # (N, 3, 5)
+    pred_wrist = pred_wrist[..., None]  # (N, 3, 5, 1)
+
+    gt_wrist = gt_wrist[..., None]
+    gt_wrist = gt_wrist.repeat_interleave(5, -1)
+    gt_wrist = gt_wrist[..., None]
+
+    pred_hand = torch.concatenate([pred_wrist, pred_fingers], axis=-1)  # (N, 3, 5, 5)
+    gt_hand = torch.concatenate([gt_wrist, gt_fingers], axis=-1)  # (N, 3, 5, 5)
+
+    pred_hand_distance = torch.zeros_like(pred_hand[..., :-1])  # (N, 3, 5, 4)
+    gt_hand_distance = torch.zeros_like(gt_hand[..., :-1])  # (N, 3, 5, 4)
+
+    for i in range(1, pred_hand_distance.shape[-1]):
+        pred_hand_distance[..., i - 1] = pred_hand[..., i] - pred_hand[..., i - 1]
+        gt_hand_distance[..., i - 1] = gt_hand[..., i] - gt_hand[..., i - 1]
+
+    pred_for_each_finger = torch.sum(pred_hand_distance, axis=-1)  # (N, 3, 5)    
+    gt_for_each_finger = torch.sum(gt_hand_distance, axis=-1)  # (N, 3, 5)
+
+    ref_loss = F.mse_loss(pred_for_each_finger, gt_for_each_finger, reduction='mean')
+
+    independent_loss = F.mse_loss(pred, gt)
+
+    loss = 0.8 * ref_loss + independent_loss
+
+    return loss
+
 def train_model(model, 
     train_dataloader, 
     val_dataloader, 
@@ -58,10 +111,7 @@ def train_model(model,
     early_stopping=None,
     scheduler=None,
     writer=None,
-    log_seq=100,
-    weight_idx=None,
-    weight=None,
-    train_left_arm_hand_only=True):
+    log_seq=100):
     best_val_loss = float('inf')
     train_losses = []
     val_losses = []
@@ -73,23 +123,17 @@ def train_model(model,
         for inputs, targets in train_dataloader:
             inputs = inputs.to("cuda")
             targets = targets.to("cuda")
-            outputs = model(inputs)  # shape: (B, 144), B = batch_size, 144 = output_dim
-            outputs = outputs.reshape(-1, 3, 21)  # shape: (B, 3, 44). For now, we use fused thumb as input => already removed thumb in output nodes
-            targets = targets.reshape(-1, 3, 21)
-            if train_left_arm_hand_only:
-                targets = targets[..., :26]
-                outputs = outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
-            
-            elementwise_loss = F.mse_loss(outputs, targets, reduction='none')
-            if weight_idx:
-                elementwise_loss[..., weight_idx] *= weight
-            loss = elementwise_loss.mean()
+            outputs = model(inputs)  # shape: (B, 126), B = batch_size, 126 = 21 * 3 * 2 (21 hand joints)
+            #outputs = outputs.reshape(-1, 3, 21)  # shape: (B, 3, 44). For now, we use fused thumb as input => already removed thumb in output nodes
+            #targets = targets.reshape(-1, 3, 21)
+
+            train_loss = custom_loss_function(outputs, targets)            
 
             optimizer.zero_grad()
-            loss.backward()
+            train_loss.backward()
             optimizer.step()
 
-            running_loss += loss.item() 
+            running_loss += train_loss.item() 
 
         epoch_loss = running_loss / len(train_dataloader)
         train_losses.append(epoch_loss)
@@ -102,16 +146,11 @@ def train_model(model,
                 val_inputs = val_inputs.to("cuda")
                 val_targets = val_targets.to("cuda")
                 val_outputs = model(val_inputs)
-                val_outputs = val_outputs.reshape(-1, 3, 21)  # shape: (B, 3, 48)
-                val_targets = val_targets.reshape(-1, 3, 21)
-                if train_left_arm_hand_only:
-                    val_outputs = val_outputs[..., :26]  # shape: (B, 3, 26), just get body and left hand to calculate loss
-                    val_targets = val_targets[..., :26]
+                #val_outputs = val_outputs.reshape(-1, 3, 21)  # shape: (B, 3, 48)
+                #val_targets = val_targets.reshape(-1, 3, 21)
+
+                val_batch_elementwise_loss = custom_loss_function(val_outputs, val_targets)
                 
-                val_batch_elementwise_loss = F.mse_loss(val_outputs, val_targets, reduction='none')
-                if weight_idx:
-                    val_batch_elementwise_loss[..., weight_idx] *= weight
-                val_batch_elementwise_loss = val_batch_elementwise_loss.mean()
                 val_loss += val_batch_elementwise_loss.item()
         val_loss = val_loss / len(val_dataloader)
         val_losses.append(val_loss)

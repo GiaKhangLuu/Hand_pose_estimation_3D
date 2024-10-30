@@ -52,11 +52,11 @@ rot_mat_to_rearrange_finger_coord = np.eye(3)
 rot_mat_for_ip = R.from_euler("x", 90, degrees=True).as_matrix()
 
 STATIC_BOUND = 1
-joint1_min = -74 
-joint1_max = 45 
-joint2_min = -90 
+joint1_min = -69 
+joint1_max = 39
+joint2_min = -80 
 joint2_max = 0 
-joint3_min = -90 
+joint3_min = -80 
 joint3_max = 0 
 
 class LeftThumbFingerAngleCalculator(LeftFingerAngleCalculator):

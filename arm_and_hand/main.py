@@ -37,9 +37,10 @@ from common import (load_data_from_npz_file,
     load_config, 
     scale_intrinsic_by_res)
 from send_angles_to_robot import send_angles_to_robot_using_pid
-from landmarks_detectors import LandmarksDetectors
+#from landmarks_detectors import LandmarksDetectors
+from landmark_detector import RTMPoseDetector_BothSides
 from landmarks_fuser import LandmarksFuser
-from angle_noise_reducer import AngleNoiseReducer
+from angle_smoother import ArmAngleSmoother, HandAngleSmoother
 from angle_calculator import (
     HeadAngleCalculator,
     LeftArmAngleCalculator,
@@ -84,7 +85,9 @@ detection_model_list = tuple(detection_config["model_list"])
 head_fused_names = config["fusing_head_landmark_dictionary"]
 arm_hand_fused_names = config["fusing_body_landmark_dictionary"]
 fusing_landmark_dictionary = arm_hand_fused_names.copy()
-fusing_landmark_dictionary.extend(head_fused_names)
+# This dictionary specifies which landmarks we will get after detecting phase.
+# Note that this value must be match with the `selected_landmarks_idx` in `detection_config.yaml`.
+fusing_landmark_dictionary.extend(head_fused_names)  
 
 fusing_enable = config["fusing_phase"]["enable"]
 fusing_method_list = tuple(config["fusing_phase"]["fusing_methods"])
@@ -98,6 +101,8 @@ enable_right_arm_angles_noise_reducer = reduce_noise_config["right_arm_angles_no
 right_arm_angles_noise_statistical_file = reduce_noise_config["right_arm_angles_noise_reducer"]["statistical_file"]
 right_arm_angles_noise_reducer_dim = reduce_noise_config["right_arm_angles_noise_reducer"]["dim"]
 enable_left_hand_angles_noise_reducer = reduce_noise_config["left_hand_angles_noise_reducer"]["enable"]
+left_hand_angles_noise_statistical_file = reduce_noise_config["left_hand_angles_noise_reducer"]["statistical_file"]
+left_hand_angles_noise_reducer_dim = reduce_noise_config["left_hand_angles_noise_reducer"]["dim"]
 
 draw_xyz = config["debugging_mode"]["draw_xyz"]
 draw_left_arm_coordinates = config["debugging_mode"]["show_left_arm"]
@@ -113,7 +118,7 @@ if is_right_hand_fused:
     is_right_arm_fused = True
         
 LANDMARKS_TO_FUSED = ["left shoulder", "left hip", "right shoulder", "right hip"]
-LANDMARKS_TO_FUSED_IDX = []
+LANDMARKS_TO_FUSED_IDX = []  # This list specifies which landmarks will be fused from two cameras. Landmarks which are not specified to fuse will have 0 values.
 if is_left_arm_fused:
     LEFT_ARM_LANDMARKS_TO_FUSED = ["left elbow", "WRIST", "INDEX_FINGER_MCP", "MIDDLE_FINGER_MCP"]
     LANDMARKS_TO_FUSED.extend(LEFT_ARM_LANDMARKS_TO_FUSED)
@@ -171,10 +176,8 @@ arm_points_vis_queue = queue.Queue()  # This queue stores fused arm landmarks to
 hand_points_vis_queue = queue.Queue()  # This queue stores fused hand landmarks to visualize by open3d 
 TARGET_LEFT_ARM_HAND_ANGLES_QUEUE = queue.Queue()  # This queue stores target angles 
 
-landmarks_detectors = LandmarksDetectors(
-    model_selected_id=detection_model_selection_id, 
-    model_list=detection_model_list, 
-    model_config=detection_config, 
+landmarks_detectors = RTMPoseDetector_BothSides(
+    model_config=detection_config["mmpose"],
     draw_landmarks=draw_landmarks)
 landmarks_fuser = LandmarksFuser(
     method_selected_id=fusing_method_selection_id,
@@ -182,13 +185,17 @@ landmarks_fuser = LandmarksFuser(
     method_config=config["fusing_phase"], 
     img_size=frame_size)
 if enable_left_arm_angles_noise_reducer:
-    left_arm_angle_noise_reducer = AngleNoiseReducer(
+    left_arm_angle_noise_reducer = ArmAngleSmoother(
         angles_noise_statistical_file=left_arm_angles_noise_statistical_file, 
         dim=left_arm_angles_noise_reducer_dim)
 if enable_right_arm_angles_noise_reducer:
-    right_arm_angle_noise_reducer = AngleNoiseReducer(
+    right_arm_angle_noise_reducer = ArmAngleSmoother(
         angles_noise_statistical_file=right_arm_angles_noise_statistical_file,
         dim=right_arm_angles_noise_reducer_dim)
+if enable_left_hand_angles_noise_reducer:
+    left_hand_angle_noise_reducer = HandAngleSmoother(
+        angles_noise_statistical_file=left_hand_angles_noise_statistical_file,
+        dim=left_hand_angles_noise_reducer_dim)
 
 head_angle_calculator = HeadAngleCalculator(num_chain=1, landmark_dictionary=fusing_landmark_dictionary)
 left_arm_angle_calculator = LeftArmAngleCalculator(num_chain=3, landmark_dictionary=fusing_landmark_dictionary)
@@ -201,6 +208,8 @@ IMAGE_DIR = None
 LEFT_ARM_ANGLE_CSV_PATH = None
 RIGHT_ARM_ANGLE_CSV_PATH = None
 LEFT_HAND_ANGLE_CSV_PATH = None
+
+WAIT_TIME_TO_STAND_IN_POSITION = 3
 
 def create_files(save_landmarks, save_images, save_left_arm_angles,
     save_right_arm_angles, save_left_hand_angles):
@@ -240,6 +249,8 @@ def create_files(save_landmarks, save_images, save_left_arm_angles,
         create_csv(LEFT_HAND_ANGLE_CSV_PATH, left_hand_angles_name)
 
 if __name__ == "__main__":
+
+    time.sleep(WAIT_TIME_TO_STAND_IN_POSITION)
 
     create_dir = (save_landmarks or 
         save_left_arm_angles or 
@@ -315,14 +326,20 @@ if __name__ == "__main__":
         right_image_to_save = np.copy(right_rgb)
 
         # Detection phase
-        left_det_rs = landmarks_detectors.detect(left_rgb, left_depth, timestamp, side="left")
-        right_det_rs = landmarks_detectors.detect(right_rgb, right_depth, timestamp, side="right")
+        detection_input = {
+            "left_cam_rgb": left_rgb,
+            "left_cam_depth": left_depth,
+            "right_cam_rgb":right_rgb,
+            "right_cam_depth": right_depth,
+        } 
 
-        left_camera_body_landmarks_xyZ = left_det_rs["detection_result"]
-        right_camera_body_landmarks_xyZ = right_det_rs["detection_result"]
+        detection_result = landmarks_detectors(detection_input)
+
+        left_camera_body_landmarks_xyZ = detection_result["left_cam_detection_result"]
+        right_camera_body_landmarks_xyZ = detection_result["right_cam_detection_result"]
         if draw_landmarks:
-            left_rgb = left_det_rs["drawed_img"]
-            right_rgb = right_det_rs["drawed_img"]
+            left_rgb = detection_result["left_cam_drawed_img"]
+            right_rgb = detection_result["right_cam_drawed_img"]
 
         # Fusing phase
         if (fusing_enable and
@@ -355,7 +372,7 @@ if __name__ == "__main__":
                     head_result = head_angle_calculator(arm_hand_XYZ_wrt_left_shoulder,
                         parent_coordinate=xyz_origin)
                     head_angles = head_result["head"]["angles"]
-                    print(head_angles)
+                    #print(head_angles)
                 else:
                     head_angles = [0] * 2
 
@@ -408,8 +425,8 @@ if __name__ == "__main__":
                     
                     raw_left_hand_angles = [*left_hand_angles] 
                     if enable_left_hand_angles_noise_reducer:    
-                        # TODO: Applying reducer for left hand angles
-                        pass
+                        left_hand_angles = np.array(left_hand_angles)
+                        left_hand_angles = left_hand_angle_noise_reducer(left_hand_angles)
                     smooth_left_hand_angles = [*left_hand_angles]
                 else:
                     left_hand_result = None
@@ -453,7 +470,7 @@ if __name__ == "__main__":
                         frame_calibrated_size=frame_calibrated_size[::-1], 
                         mode="ground_truth",
                         timestamp=timestamp,
-                        output_landmarks=arm_hand_fused_XYZ)
+                        output_landmarks=arm_hand_fused_XYZ[:48])
                     append_to_csv(LANDMARK_CSV_PATH, input_row)
             
         if save_images and timestamp > 100:  # warm up for 100 frames before saving image 
@@ -503,6 +520,8 @@ if __name__ == "__main__":
         # If timestamp 
         if timestamp // 1000 >= every_1k_timestamp and create_dir:
             every_1k_timestamp += 1
+            if save_landmarks:
+                split_train_test_val(LANDMARK_CSV_PATH)
             create_files(
                 save_landmarks=save_landmarks, 
                 save_images=save_images,
@@ -510,8 +529,6 @@ if __name__ == "__main__":
                 save_right_arm_angles=save_right_arm_angles, 
                 save_left_hand_angles=save_left_hand_angles
             )
-            if save_landmarks:
-                split_train_test_val(LANDMARK_CSV_PATH)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             cv2.destroyAllWindows()

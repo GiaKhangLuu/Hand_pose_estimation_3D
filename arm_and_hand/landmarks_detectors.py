@@ -23,6 +23,8 @@ from mediapipe_drawing import draw_hand_landmarks_on_image, draw_arm_landmarks_o
 from common import (get_xyZ,
     get_depth)
 
+from landmark_detector import RTMPoseDetector
+
 class LandmarksDetectors:
     def __init__(
         self, 
@@ -105,52 +107,7 @@ class LandmarksDetectors:
                 self._left_camera_body_detector = None
                 self._right_camera_body_detector = None
         else:
-            # -------------- INIT MMPOSE MODELS -------------- 
-            self._mmpose_selected_landmarks_id = list(config_by_model["selected_landmarks_idx"])
-            self._mmpose_cvt_color = config_by_model["convert_color_channel"]
-            self._person_detection_activation = config_by_model["person_detection"]["is_enable"]
-            person_detector_config = config_by_model["person_detection"]["person_detector_config"]
-            person_detector_weight = config_by_model["person_detection"]["person_detector_weight"]
-            if self._person_detection_activation:
-                self._left_camera_person_detector = init_detector(person_detector_config,
-                    person_detector_weight, device="cuda")
-                self._left_camera_person_detector.cfg = adapt_mmdet_pipeline(self._left_camera_person_detector.cfg)
-                self._right_camera_person_detector = init_detector(person_detector_config,
-                    person_detector_weight, device="cuda")
-                self._right_camera_person_detector.cfg = adapt_mmdet_pipeline(self._right_camera_person_detector.cfg)
-            else:
-                self._left_camera_person_detector = None
-                self._right_camera_person_detector = None
-
-            self._pose_estimation_activation = config_by_model["pose_estimation"]["is_enable"]
-            left_camera_pose_estimator_config = config_by_model["pose_estimation"]["left_camera_pose_estimator_config"]
-            left_camera_pose_estimator_weight = config_by_model["pose_estimation"]["left_camera_pose_estimator_weight"]
-            right_camera_pose_estimator_config = config_by_model["pose_estimation"]["right_camera_pose_estimator_config"]
-            right_camera_pose_estimator_weight = config_by_model["pose_estimation"]["right_camera_pose_estimator_weight"]
-            if self._pose_estimation_activation:
-                self._left_camera_pose_estimator = init_pose_estimator(left_camera_pose_estimator_config, 
-                    left_camera_pose_estimator_weight, device="cuda") 
-                self._right_camera_pose_estimator = init_pose_estimator(right_camera_pose_estimator_config, 
-                    right_camera_pose_estimator_weight, device="cuda") 
-
-            if (self._draw_landmarks and 
-                self._left_camera_pose_estimator is not None and
-                self._right_camera_pose_estimator is not None):
-                self._left_camera_pose_estimator.cfg.visualizer.line_width = 2
-                self._right_camera_pose_estimator.cfg.visualizer.line_width = 2
-                self._landmarks_thres = config_by_model["landmark_thresh"]
-
-                # build the visualizer
-                self._left_camera_mmpose_visualizer = VISUALIZERS.build(
-                    self._left_camera_pose_estimator.cfg.visualizer)
-                self._right_camera_mmpose_visualizer = VISUALIZERS.build(
-                    self._right_camera_pose_estimator.cfg.visualizer)
-
-                # set skeleton, colormap and joint connection rule
-                self._left_camera_mmpose_visualizer.set_dataset_meta(
-                    self._left_camera_pose_estimator.dataset_meta)
-                self._right_camera_mmpose_visualizer.set_dataset_meta(
-                    self._right_camera_pose_estimator.dataset_meta)
+            self._rtmpose_models = RTMPoseDetector(config_by_model, self._draw_landmarks)
     
     def detect(self, img, depth_map, timestamp, side):
         assert side in ["left", "right"]
@@ -222,66 +179,6 @@ class LandmarksDetectors:
                     body_landmarks_xyZ[-1, :][None, :]], axis=0)
         else:
             # -------------- MMPOSE DETECTION -------------- 
-            person_detector, wholebody_detector = None, None
-            bboxes = None
-            if self._person_detection_activation:  
-                person_detector = self._left_camera_person_detector if side == "left" else self._right_camera_person_detector
-                processed_img = np.copy(img)
-                if  self._mmpose_cvt_color:
-                    processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
-                det_result = inference_detector(person_detector, processed_img)
-                pred_instance = det_result.pred_instances.cpu().numpy()
-                bboxes = np.concatenate(
-                    (pred_instance.bboxes, pred_instance.scores[:, None]), axis=1)
-                bboxes = bboxes[np.logical_and(pred_instance.labels == 0,
-                    pred_instance.scores > 0.6)]
-                bboxes = bboxes[nms(bboxes, 0.3), :]
-                """Now we dont get a box with highest score, we should get box with 
-                highest area"""
-                if bboxes.size > 0:
-                    areas = (bboxes[:, 2] - bboxes[:, 0]) * (bboxes[:, 3] - bboxes[:, 1])
-                    largest_area_index = np.argmax(areas)
-                    bboxes = bboxes[largest_area_index, :-1][None, :]
-            if self._pose_estimation_activation:
-                wholebody_detector = self._left_camera_pose_estimator if side == "left" else self._right_camera_pose_estimator
-                if self._draw_landmarks:
-                    visualizer = self._left_camera_mmpose_visualizer if side == "left" else self._right_camera_mmpose_visualizer
-                processed_img = np.copy(img)
-                if  self._mmpose_cvt_color:
-                    processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
-                if bboxes is not None and bboxes.size > 0: 
-                    wholebody_det_rs = inference_topdown(wholebody_detector, processed_img, bboxes)
-                else:
-                    wholebody_det_rs = inference_topdown(wholebody_detector, processed_img)
-                wholebody_det_rs = merge_data_samples(wholebody_det_rs)
-                wholebody_preds = wholebody_det_rs.get("pred_instances", None)
-                if wholebody_preds is not None:
-                    wholebody_landmarks = wholebody_preds.keypoints[0]
-                    wholebody_landmarks_score = wholebody_preds.keypoint_scores[0]
-                    selected_score =  wholebody_landmarks_score[self._mmpose_selected_landmarks_id]
-                    mask = selected_score > self._landmarks_thres
-                    body_hand_selected_xyZ = wholebody_landmarks[self._mmpose_selected_landmarks_id]
-                    body_hand_selected_xyZ = body_hand_selected_xyZ[mask]
-
-                landmarks_depth = get_depth(body_hand_selected_xyZ, depth_map, 9)
-                body_hand_selected_xyZ = np.concatenate([body_hand_selected_xyZ, landmarks_depth[:, None]], axis=-1)
-
-                if self._draw_landmarks:
-                    drawed_img = visualizer.add_datasample(
-                        'result',
-                        drawed_img,
-                        data_sample=wholebody_det_rs,
-                        draw_gt=False,
-                        draw_heatmap=False,
-                        draw_bbox=True,
-                        show_kpt_idx=False,
-                        skeleton_style="mmpose",
-                        show=False,
-                        wait_time=0,
-                        kpt_thr=self._landmarks_thres
-                    )
-
-        detection_result = {"detection_result": body_hand_selected_xyZ,
-            "drawed_img": drawed_img}
+            detection_result = self._rtmpose_models(img, depth_map, timestamp, side)
 
         return detection_result

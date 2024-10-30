@@ -52,12 +52,12 @@ rot_mat_to_rearrange_finger_coord = R.from_euler("x", 90, degrees=True).as_matri
 rot_mat_for_pip = np.eye(3)
 
 STATIC_BOUND = 1
-joint1_min = -90
-joint1_max = 8
+joint1_min = -80
+joint1_max = -1
 joint2_min = -30
 joint2_max = 30
-joint3_min = -90
-joint3_max = 8
+joint3_min = -70
+joint3_max = -1
 
 class LeftFingerAngleCalculator(ChainAngleCalculator):
     def __init__(

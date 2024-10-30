@@ -31,12 +31,16 @@ import pandas as pd
 import numpy as np
 import json
 from utilities import convert_to_left_shoulder_coord
-from left_arm_angle_calculator import LeftArmAngleCalculator
-from right_arm_angle_calculator import RightArmAngleCalculator
+from angle_calculator import (
+    LeftArmAngleCalculator,
+    RightArmAngleCalculator,
+    LeftHandAngleCalculator
+)
 
 def get_angle_initial_expectation_and_cov(
     home_position_file, 
-    angle_calculator, 
+    arm_angle_calculator, 
+    hand_angle_calculator,
     landmark_dictionary,
     side="left", 
     angles_from="arm"):
@@ -59,20 +63,35 @@ def get_angle_initial_expectation_and_cov(
             gt_data[i],
             landmark_dictionary) 
 
-        results = angle_calculator(arm_hand_XYZ_wrt_shoulder, parent_coordinate=xyz_origin)
-        angles_at_current_frame = results[f"{side}_{angles_from}"]["angles"]
-        angles_at_current_frame = np.array(angles_at_current_frame)
+        arm_results = arm_angle_calculator(arm_hand_XYZ_wrt_shoulder, parent_coordinate=xyz_origin)
+        if angles_from == "arm":
+            angles_at_current_frame = arm_results[f"{side}_{angles_from}"]["angles"]
+            angles_at_current_frame = np.array(angles_at_current_frame)
+        elif angles_from == "hand":
+            hand_angles = []
+
+            parent_coord = arm_results[f"{side}_arm"]["rot_mats_wrt_origin"][-1]
+            hand_results = hand_angle_calculator(arm_hand_XYZ_wrt_shoulder, parent_coord)
+            
+            for finger_name in hand_angle_calculator.fingers_name:
+                finger_i_angles = hand_results[finger_name]["angles"]
+                if finger_name != "THUMB":
+                    finger_i_angles[0], finger_i_angles[1] = finger_i_angles[1], finger_i_angles[0]
+                hand_angles.extend(finger_i_angles)
+            angles_at_current_frame = np.array(hand_angles)
+        
         angles.append(angles_at_current_frame)
 
     angles = np.array(angles)
     home_init_expectation = np.mean(angles, axis=0)
-    home_init_cov = np.var(angles, axis=0)
+    home_init_cov = np.std(angles, axis=0)
 
     return home_init_expectation, home_init_cov
 
 def calculate_noise_of_fixed_pose(
     measure_noise_csv_files, 
-    angle_calculator, 
+    arm_angle_calculator, 
+    hand_angle_calculator,
     landmark_dictionary,
     side="left", 
     angles_from="arm"):
@@ -82,10 +101,11 @@ def calculate_noise_of_fixed_pose(
         data = pd.read_csv(csv_file)
         total_rows = len(data)
 
+        off_set = 10
         start_idx = total_rows // 4  
         end_idx = start_idx + total_rows // 2  
 
-        middle_data = data.iloc[start_idx:end_idx]
+        middle_data = data.iloc[max(0, start_idx - off_set):end_idx]
         gt_data = middle_data.loc[:, "left_shoulder_output_x":"right_pinky_tip_output_z"].values
         gt_data = gt_data.reshape(-1, 3, 48)
         gt_data = np.transpose(gt_data, (0, 2, 1))
@@ -96,17 +116,31 @@ def calculate_noise_of_fixed_pose(
                 gt_data[i],
                 landmark_dictionary)
 
-            result = angle_calculator(arm_hand_XYZ_wrt_shoulder,
+            arm_result = arm_angle_calculator(arm_hand_XYZ_wrt_shoulder,
                 xyz_origin)
-            angles = result[f"{side}_{angles_from}"]["angles"]
-            angles = np.array(angles)
-            angles_through_frame.append(angles)
+            if angles_from == "arm":
+                angles_at_current_frame = arm_result[f"{side}_{angles_from}"]["angles"]
+                angles_at_current_frame = np.array(angles_at_current_frame)
+            elif angles_from == "hand":
+                hand_angles = []
+
+                parent_coord = arm_result[f"{side}_arm"]["rot_mats_wrt_origin"][-1]
+                hand_results = hand_angle_calculator(arm_hand_XYZ_wrt_shoulder, parent_coord)
+            
+                for finger_name in hand_angle_calculator.fingers_name:
+                    finger_i_angles = hand_results[finger_name]["angles"]
+                    if finger_name != "THUMB":
+                        finger_i_angles[0], finger_i_angles[1] = finger_i_angles[1], finger_i_angles[0]
+                    hand_angles.extend(finger_i_angles)
+                angles_at_current_frame = np.array(hand_angles)
+
+            angles_through_frame.append(angles_at_current_frame)
 
         angles_through_frame = np.array(angles_through_frame)
-        angles_var.append(np.var(angles_through_frame, axis=0))
+        angles_var.append(np.std(angles_through_frame, axis=0))
     
     angles_var = np.array(angles_var)
-    noise_measured = np.median(angles_var, axis=0)
+    noise_measured = np.mean(angles_var, axis=0)
     return noise_measured
 
 if __name__ == "__main__":
@@ -132,24 +166,25 @@ if __name__ == "__main__":
      "RIGHT_RING_FINGER_PIP", "RIGHT_RING_FINGER_DIP", "RIGHT_RING_FINGER_TIP",
      "RIGHT_PINKY_MCP", "RIGHT_PINKY_PIP", "RIGHT_PINKY_DIP", "RIGHT_PINKY_TIP"]
     
-    SIDE = "right" 
+    SIDE = "left" 
     assert SIDE in ["left", "right"]
     
-    ESTIMATE_NOISE_FOR = "arm" 
+    ESTIMATE_NOISE_FOR = "hand" 
     assert ESTIMATE_NOISE_FOR in ["arm", "hand"]
-    
-    NUM_ARM_ANGLES = 6 
+
+    if ESTIMATE_NOISE_FOR == "arm":
+        NUM_ANGLES = 6 
+    elif ESTIMATE_NOISE_FOR == "hand":
+        NUM_ANGLES = 15
+
     DIM = 1
     SAVE_DIR = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/configuration"
     FILE_NAME = f"{SIDE}_{ESTIMATE_NOISE_FOR}_angles_stats.json"
     DES_JSON_FILE = os.path.join(SAVE_DIR, FILE_NAME)
     
     if SIDE == "left": 
-        if ESTIMATE_NOISE_FOR == "arm":
-            angle_calculator = LeftArmAngleCalculator(3, landmark_dictionary)
-        else:
-            #TODO: set for left hand angle calculation
-            pass
+        arm_calculator = LeftArmAngleCalculator(3, landmark_dictionary)
+        hand_calculator = LeftHandAngleCalculator(2, landmark_dictionary)
     if SIDE == "right":
         if ESTIMATE_NOISE_FOR == "arm":
             angle_calculator = RightArmAngleCalculator(3, landmark_dictionary)
@@ -160,30 +195,55 @@ if __name__ == "__main__":
     home_position_csv_file = measure_noise_csv_files[0]
     home_init_expectation, home_init_cov = get_angle_initial_expectation_and_cov(
         home_position_csv_file,
-        angle_calculator,
+        arm_calculator,
+        hand_calculator,
         landmark_dictionary,
         side=SIDE,
         angles_from=ESTIMATE_NOISE_FOR)
     angles_measure_noises = calculate_noise_of_fixed_pose(
         measure_noise_csv_files,
-        angle_calculator,
+        arm_calculator,
+        hand_calculator,
         landmark_dictionary,
         side=SIDE,
         angles_from=ESTIMATE_NOISE_FOR)
 
     angles_stats_dict = dict()
-    
-    for i in range(NUM_ARM_ANGLES):
-        stats = dict()
-        angles_measure_noise = angles_measure_noises[i]
-        init_exp = home_init_expectation[i]
-        init_cov = home_init_cov[i]
 
-        stats["measure_noise"] = angles_measure_noise
-        stats["init_angle"] = init_exp
-        stats["cov"] = init_cov
+    if ESTIMATE_NOISE_FOR == "arm":
+        for i in range(NUM_ANGLES):
+            stats = dict()
+            angles_measure_noise = angles_measure_noises[i]
+            init_exp = home_init_expectation[i]
+            init_cov = home_init_cov[i]
 
-        angles_stats_dict["joint{}".format(i + 1)] = stats
+            stats["measure_noise"] = angles_measure_noise
+            stats["init_angle"] = init_exp
+            stats["cov"] = init_cov
+
+            angles_stats_dict["joint{}".format(i + 1)] = stats
+    elif ESTIMATE_NOISE_FOR == "hand":
+        FINGERS_NAME = ["THUMB", "INDEX", "MIDDLE", "RING", "PINKY"]
+        NUM_ANGLES_EACH_FINGER = 3
+        assert NUM_ANGLES_EACH_FINGER * len(FINGERS_NAME) == NUM_ANGLES
+        for angle_idx in range(NUM_ANGLES):
+            finger_i = angle_idx // NUM_ANGLES_EACH_FINGER
+            joint_of_finger_i = angle_idx % NUM_ANGLES_EACH_FINGER
+
+            if joint_of_finger_i == 0:
+                angles_stats_dict[FINGERS_NAME[finger_i]] = dict()
+
+            stats = dict()
+
+            angles_measure_noise = angles_measure_noises[angle_idx]
+            init_exp = home_init_expectation[angle_idx]
+            init_cov = home_init_cov[angle_idx]
+
+            stats["measure_noise"] = angles_measure_noise,
+            stats["init_angle"] = init_exp
+            stats["cov"] = init_cov
+            
+            angles_stats_dict[FINGERS_NAME[finger_i]][f"joint{joint_of_finger_i + 1}"] = stats
         
     with open(DES_JSON_FILE, 'w') as file:
         json.dump(angles_stats_dict, file)

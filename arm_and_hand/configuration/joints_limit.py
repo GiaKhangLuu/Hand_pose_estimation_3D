@@ -18,10 +18,10 @@ head_max_acce_container = np.array([
 # ------------ LEFT ARM --------------
 left_arm_joint1_max_velo = 1.5 * (180 / math.pi)
 left_arm_joint2_max_velo = 1.5 * (180 / math.pi)
-left_arm_joint3_max_velo = 2.1074 * (180 / math.pi)
-left_arm_joint4_max_velo = 2.1074 * (180 / math.pi)
-left_arm_joint5_max_velo = 3.3719 * (180 / math.pi)
-left_arm_joint6_max_velo = 3.3719 * (180 / math.pi)
+left_arm_joint3_max_velo = 2.0 * (180 / math.pi)
+left_arm_joint4_max_velo = 2.0 * (180 / math.pi)
+left_arm_joint5_max_velo = 2.5 * (180 / math.pi)
+left_arm_joint6_max_velo = 2.5 * (180 / math.pi)
 
 left_arm_joint1_max_acce = 3 * (180 / math.pi)
 left_arm_joint2_max_acce = 3 * (180 / math.pi)
@@ -48,10 +48,10 @@ left_arm_max_acce_container = np.array([
 # ------------ RIGHT ARM --------------
 right_arm_joint1_max_velo = 1.5 * (180 / math.pi)
 right_arm_joint2_max_velo = 1.5 * (180 / math.pi)
-right_arm_joint3_max_velo = 2.1074 * (180 / math.pi)
-right_arm_joint4_max_velo = 2.1074 * (180 / math.pi)
-right_arm_joint5_max_velo = 3.3719 * (180 / math.pi)
-right_arm_joint6_max_velo = 3.3719 * (180 / math.pi)
+right_arm_joint3_max_velo = 2.0 * (180 / math.pi)
+right_arm_joint4_max_velo = 2.0 * (180 / math.pi)
+right_arm_joint5_max_velo = 2.5 * (180 / math.pi)
+right_arm_joint6_max_velo = 2.5 * (180 / math.pi)
 
 right_arm_joint1_max_acce = 3 * (180 / math.pi)
 right_arm_joint2_max_acce = 3 * (180 / math.pi)

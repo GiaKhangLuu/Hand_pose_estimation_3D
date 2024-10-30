@@ -1,0 +1,2 @@
+from .rtmpose_detector import RTMPoseDetector
+from .landmark_detector_both_sides import RTMPoseDetector_BothSides
