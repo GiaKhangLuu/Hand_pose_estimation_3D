@@ -94,8 +94,11 @@ mmpose:
     #pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_l/pretrained_rtmpose_l_config.py
     #pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_l/rtmpose_l_both_sides
     # ---- RTMPOSE-M PRIME----
-    pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m_prime/pretrained_rtmpose_m_prime_config.py
-    pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m_prime/rtmpose_m_prime_both_sides
+    #pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m_prime/pretrained_rtmpose_m_prime_config.py
+    #pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m_prime/rtmpose_m_prime_both_sides
+    # ---- RTMPOSE-M PRIME DEMO----
+    pose_estimator_config: /home/giakhang/Desktop/ckpt/pretrained_rtmpose_m_prime_config.py
+    pose_estimator_weight: /home/giakhang/Desktop/ckpt/rtmpose_m_prime_both_sides
   selected_landmarks_idx:
     - 5 
     - 7 
