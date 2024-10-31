@@ -148,9 +148,9 @@ if __name__ == "__main__":
     MODEL_NAME = "transformer_encoder"
     DATETIME = "{}".format(datetime.now().strftime("%Y%m%d-%H%M"))
     DATE = "{}".format(datetime.now().strftime("%Y%m%d"))
-    BASE_DIR = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/{}".format(MODEL_NAME)
+    BASE_DIR = "Hand_pose_estimation_3D/arm_and_hand/runs/{}".format(MODEL_NAME)
     SAVE_DIR = os.path.join(BASE_DIR, DATE, DATETIME)
-    DATA_DIR = "/home/giakhang/dev/pose_sandbox/data"  
+    DATA_DIR = "data"  
     writer = SummaryWriter(log_dir=SAVE_DIR)
 
     SELECTED_DATE = "*"
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     val_leftarm_distance_thres=450,
     val_lefthand_distance_thres=150,
 
-    #FAKE_DATA_PATH = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/fake_data.csv"
+    #FAKE_DATA_PATH = "Hand_pose_estimation_3D/arm_and_hand/fake_data.csv"
     #if FAKE_DATA_PATH is not None:
         #train_paths.append(FAKE_DATA_PATH)
     fake_train_paths = glob.glob(os.path.join(DATA_DIR, "fake_data", "train", "fake_*.csv"))

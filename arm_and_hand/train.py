@@ -132,7 +132,7 @@ if __name__ == "__main__":
     writer = SummaryWriter(log_dir=f'runs/fusing_transformer_{datetime.now().strftime("%Y%m%d-%H%M%S")}')
 
     sequence_length = 5  # Use a sequence of 5 frames
-    DATA_DIR = "/home/giakhang/dev/pose_sandbox/data"  
+    DATA_DIR = "data"  
     train_paths = glob.glob(os.path.join(DATA_DIR, "*/*/fine_landmarks_{}_*.csv".format("train")))
     val_paths = glob.glob(os.path.join(DATA_DIR, "*/*/fine_landmarks_{}_*.csv".format("val")))
     train_dataset = HandArmLandmarksDataset(train_paths, sequence_length)

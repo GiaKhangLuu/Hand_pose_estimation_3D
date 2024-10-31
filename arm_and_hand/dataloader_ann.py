@@ -258,7 +258,7 @@ if __name__ == "__main__":
     #dataset = HandArmLandmarksDataset(inputs, outputs, sequence_length)
     #dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
-    DATA_DIR = "/home/giakhang/dev/pose_sandbox/data"  
+    DATA_DIR = "data"  
     train_files = glob.glob(os.path.join(DATA_DIR, "*/*/fine_landmarks_train_*.csv"))
 
     HandArmLandmarksDataset(train_files, sequence_length)

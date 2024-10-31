@@ -1,5 +1,3 @@
-# TODO: Make this config file more general, dont hard code the path anymore =)))
-
 send_udp: true
 run_to_collect_data_for_fusing_and_detection: false
 
@@ -74,7 +72,7 @@ fusing_phase:
     num_encoder_layers: 6
     dim_feedforward: 512
     dropout: 0.1
-    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/best_model_2024-08-15-14:03.pth
+    model_weight_path: Hand_pose_estimation_3D/arm_and_hand/best_model_2024-08-15-14:03.pth
   minimize_distance:
     algo_name: L-BFGS-B
     tolerance: 1e-3
@@ -84,23 +82,22 @@ fusing_phase:
     hidden_dim: 216
     num_hidden_layers: 8
     dropout_rate: 0.1
-    model_weight_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240930/20240930-1308/ann_8_layers_best.pth
-    minmax_scaler_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240930/20240930-1308/input_scaler.pkl
+    model_weight_path: Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240930/20240930-1308/ann_8_layers_best.pth
+    minmax_scaler_path: Hand_pose_estimation_3D/arm_and_hand/runs/ann/20240930/20240930-1308/input_scaler.pkl
 
 reduce_noise_phase:
   left_arm_angles_noise_reducer:
     enable: true
-    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/configuration/left_arm_angles_stats.json
+    statistical_file: Hand_pose_estimation_3D/arm_and_hand/configuration/left_arm_angles_stats.json
     dim: 1
   right_arm_angles_noise_reducer:
     enable: true
-    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/configuration/right_arm_angles_stats.json
+    statistical_file: Hand_pose_estimation_3D/arm_and_hand/configuration/right_arm_angles_stats.json
     dim: 1
   left_hand_angles_noise_reducer:
     enable: true
-    statistical_file: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/configuration/left_hand_angles_stats.json
+    statistical_file: Hand_pose_estimation_3D/arm_and_hand/configuration/left_hand_angles_stats.json
     dim: 1
-
 
 camera:
   frame_calibrated_size:
@@ -108,10 +105,10 @@ camera:
     height: 1080
   left_camera:
     mxid: "18443010E13D641200"
-    left_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/camera_calibration/left_oak_calibration.npz
+    left_camera_calibration_path: Hand_pose_estimation_3D/camera_calibration/left_oak_calibration.npz
   right_camera:
     mxid: "18443010613E940F00"
-    right_camera_calibration_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/camera_calibration/right_oak_calibration.npz
+    right_camera_calibration_path: Hand_pose_estimation_3D/camera_calibration/right_oak_calibration.npz
 
 process_frame:
   frame_size:  # the higher resolution is, the futher distance which can be processed by the system

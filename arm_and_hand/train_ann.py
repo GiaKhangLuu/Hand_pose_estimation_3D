@@ -151,9 +151,9 @@ if __name__ == "__main__":
     MODEL_NAME = "ann"
     DATETIME = "{}".format(datetime.now().strftime("%Y%m%d-%H%M"))
     DATE = "{}".format(datetime.now().strftime("%Y%m%d"))
-    BASE_DIR = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/runs/{}".format(MODEL_NAME)
+    BASE_DIR = "Hand_pose_estimation_3D/arm_and_hand/runs/{}".format(MODEL_NAME)
     SAVE_DIR = os.path.join(BASE_DIR, DATE, DATETIME)
-    DATA_DIR = "/home/giakhang/dev/pose_sandbox/data"  
+    DATA_DIR = "data"  
     writer = SummaryWriter(log_dir=SAVE_DIR)
 
     SELECTED_DATE = "*"

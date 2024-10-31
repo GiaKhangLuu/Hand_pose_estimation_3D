@@ -24,8 +24,8 @@ that we want to reduce noise for left arm:
 import os
 import sys
 
-sys.path.append("/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand")
-sys.path.append("/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D")
+sys.path.append("Hand_pose_estimation_3D/arm_and_hand")
+sys.path.append("Hand_pose_estimation_3D")
 
 import pandas as pd
 import numpy as np
@@ -145,12 +145,12 @@ def calculate_noise_of_fixed_pose(
 
 if __name__ == "__main__":
     measure_noise_csv_files = [
-        "/home/giakhang/dev/pose_sandbox/data/2024-10-19/2024-10-19-15:34/landmarks_all_2024-10-19-15:34.csv",
-        "/home/giakhang/dev/pose_sandbox/data/2024-10-19/2024-10-19-15:37/landmarks_all_2024-10-19-15:37.csv",
-        "/home/giakhang/dev/pose_sandbox/data/2024-10-19/2024-10-19-15:38/landmarks_all_2024-10-19-15:38.csv",
-        "/home/giakhang/dev/pose_sandbox/data/2024-10-19/2024-10-19-15:39/landmarks_all_2024-10-19-15:39.csv",
-        "/home/giakhang/dev/pose_sandbox/data/2024-10-19/2024-10-19-15:40/landmarks_all_2024-10-19-15:40.csv",
-        "/home/giakhang/dev/pose_sandbox/data/2024-10-19/2024-10-19-15:41/landmarks_all_2024-10-19-15:41.csv"
+        "data/2024-10-19/2024-10-19-15:34/landmarks_all_2024-10-19-15:34.csv",
+        "data/2024-10-19/2024-10-19-15:37/landmarks_all_2024-10-19-15:37.csv",
+        "data/2024-10-19/2024-10-19-15:38/landmarks_all_2024-10-19-15:38.csv",
+        "data/2024-10-19/2024-10-19-15:39/landmarks_all_2024-10-19-15:39.csv",
+        "data/2024-10-19/2024-10-19-15:40/landmarks_all_2024-10-19-15:40.csv",
+        "data/2024-10-19/2024-10-19-15:41/landmarks_all_2024-10-19-15:41.csv"
     ]
     
     landmark_dictionary = ["left shoulder", "left elbow", "left hip", "right shoulder",
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         NUM_ANGLES = 15
 
     DIM = 1
-    SAVE_DIR = "/home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/arm_and_hand/configuration"
+    SAVE_DIR = "Hand_pose_estimation_3D/arm_and_hand/configuration"
     FILE_NAME = f"{SIDE}_{ESTIMATE_NOISE_FOR}_angles_stats.json"
     DES_JSON_FILE = os.path.join(SAVE_DIR, FILE_NAME)
     

@@ -20,6 +20,7 @@ import shutil
 import socket
 import math
 from datetime import datetime
+from pathlib import Path
 
 from stream_3d import visualize_sticky_man
 from camera_tools import initialize_oak_cam, initialize_realsense_cam, stream_rs, stream_oak
@@ -37,7 +38,6 @@ from common import (load_data_from_npz_file,
     load_config, 
     scale_intrinsic_by_res)
 from send_angles_to_robot import send_angles_to_robot_using_pid
-#from landmarks_detectors import LandmarksDetectors
 from landmark_detector import RTMPoseDetector_BothSides
 from landmarks_fuser import LandmarksFuser
 from angle_smoother import ArmAngleSmoother, HandAngleSmoother
@@ -49,6 +49,7 @@ from angle_calculator import (
 )
 
 # ------------------- READ CONFIG ------------------- 
+WORK_DIR = Path(os.environ["MOCAP_WORKDIR"])
 MAIN_CONFIG_FILE_PATH = os.path.join(CURRENT_DIR, "configuration", "main_conf.yaml") 
 config = load_config(MAIN_CONFIG_FILE_PATH)
 
@@ -56,9 +57,9 @@ DETECTION_CONFIG_FILE_PATH = os.path.join(CURRENT_DIR, "configuration", "detecti
 detection_config = load_config(DETECTION_CONFIG_FILE_PATH)
 
 left_oak_mxid = config["camera"]["left_camera"]["mxid"]
-left_cam_calib_path = config["camera"]["left_camera"]["left_camera_calibration_path"]
+left_cam_calib_path = WORK_DIR / config["camera"]["left_camera"]["left_camera_calibration_path"]
 right_oak_mxid = config["camera"]["right_camera"]["mxid"]
-right_cam_calib_path = config["camera"]["right_camera"]["right_camera_calibration_path"]
+right_cam_calib_path = WORK_DIR / config["camera"]["right_camera"]["right_camera_calibration_path"]
 
 frame_size = (config["process_frame"]["frame_size"]["width"], 
     config["process_frame"]["frame_size"]["height"])
@@ -95,13 +96,13 @@ fusing_method_selection_id = config["fusing_phase"]["fusing_selection_id"]
 
 reduce_noise_config = config["reduce_noise_phase"]
 enable_left_arm_angles_noise_reducer = reduce_noise_config["left_arm_angles_noise_reducer"]["enable"]
-left_arm_angles_noise_statistical_file = reduce_noise_config["left_arm_angles_noise_reducer"]["statistical_file"]
+left_arm_angles_noise_statistical_file = WORK_DIR / reduce_noise_config["left_arm_angles_noise_reducer"]["statistical_file"]
 left_arm_angles_noise_reducer_dim = reduce_noise_config["left_arm_angles_noise_reducer"]["dim"]
 enable_right_arm_angles_noise_reducer = reduce_noise_config["right_arm_angles_noise_reducer"]["enable"]
-right_arm_angles_noise_statistical_file = reduce_noise_config["right_arm_angles_noise_reducer"]["statistical_file"]
+right_arm_angles_noise_statistical_file = WORK_DIR / reduce_noise_config["right_arm_angles_noise_reducer"]["statistical_file"]
 right_arm_angles_noise_reducer_dim = reduce_noise_config["right_arm_angles_noise_reducer"]["dim"]
 enable_left_hand_angles_noise_reducer = reduce_noise_config["left_hand_angles_noise_reducer"]["enable"]
-left_hand_angles_noise_statistical_file = reduce_noise_config["left_hand_angles_noise_reducer"]["statistical_file"]
+left_hand_angles_noise_statistical_file = WORK_DIR / reduce_noise_config["left_hand_angles_noise_reducer"]["statistical_file"]
 left_hand_angles_noise_reducer_dim = reduce_noise_config["left_hand_angles_noise_reducer"]["dim"]
 
 draw_xyz = config["debugging_mode"]["draw_xyz"]
@@ -222,7 +223,7 @@ def create_files(save_landmarks, save_images, save_left_arm_angles,
 
     current_time = datetime.now().strftime('%Y-%m-%d-%H:%M')
     current_date = datetime.now().strftime('%Y-%m-%d')
-    DATA_DIR = os.path.join(CURRENT_DIR, "../..", "data", current_date)
+    DATA_DIR = WORK_DIR / os.path.join(CURRENT_DIR, "../..", "data", current_date)
     if not os.path.exists(DATA_DIR):
         os.mkdir(DATA_DIR)
     DATA_DIR = os.path.join(DATA_DIR, current_time)

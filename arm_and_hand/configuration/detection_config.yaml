@@ -13,7 +13,7 @@ mediapipe:
     min_presence_confidence: 0.3
     min_tracking_confidence: 0.3
     num_hand: 2
-    model_asset_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mediapipe/hand/hand_landmarker.task
+    model_asset_path: Hand_pose_estimation_3D/model_zoo/mediapipe/hand/hand_landmarker.task
     hand_landmarks:
       - WRIST
       - THUMB_CMC
@@ -41,7 +41,7 @@ mediapipe:
     min_detection_confidence: 0.5
     min_tracking_confidence: 0.5
     visibility_threshold: 0.2
-    model_asset_path: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mediapipe/pose/pose_landmarker_lite.task
+    model_asset_path: Hand_pose_estimation_3D/model_zoo/mediapipe/pose/pose_landmarker_lite.task
     body_landmarks:
       - nose
       - left eye (inner)
@@ -81,24 +81,16 @@ mmpose:
   landmark_thresh: 0.5
   person_detection:
     is_enable: true
-    person_detector_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
-    person_detector_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmdet-trt/rtmdet_nano
+    person_detector_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
+    person_detector_weight: mmdeploy/rtmdet-trt/rtmdet_nano
   pose_estimation:
     is_enable: true
-    # ---- RTMPOSE-M ----
-    #left_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-    #left_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m/rtmpose_m_left_cam
-    #right_camera_pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m/pretrained_rtmpose-m_config.py
-    #right_camera_pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m/rtmpose_m_right_cam
     # ---- RTMPOSE-L ----
-    #pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_l/pretrained_rtmpose_l_config.py
-    #pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_l/rtmpose_l_both_sides
+    #pose_estimator_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_l/pretrained_rtmpose_l_config.py
+    #pose_estimator_weight: mmdeploy/rtmpose-trt/rtmpose_l/rtmpose_l_both_sides
     # ---- RTMPOSE-M PRIME----
-    #pose_estimator_config: /home/giakhang/dev/pose_sandbox/Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m_prime/pretrained_rtmpose_m_prime_config.py
-    #pose_estimator_weight: /home/giakhang/dev/pose_sandbox/mmdeploy/rtmpose-trt/rtmpose_m_prime/rtmpose_m_prime_both_sides
-    # ---- RTMPOSE-M PRIME DEMO----
-    pose_estimator_config: /home/giakhang/Desktop/ckpt/pretrained_rtmpose_m_prime_config.py
-    pose_estimator_weight: /home/giakhang/Desktop/ckpt/rtmpose_m_prime_both_sides
+    pose_estimator_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m_prime/pretrained_rtmpose_m_prime_config.py
+    pose_estimator_weight: mmdeploy/rtmpose-trt/rtmpose_m_prime/rtmpose_m_prime_both_sides
   selected_landmarks_idx:
     - 5 
     - 7 

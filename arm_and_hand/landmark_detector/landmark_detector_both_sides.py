@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import numpy as np
 #import warning
 from mmdeploy_runtime import Detector, PoseDetector
@@ -24,6 +25,8 @@ from common import (
     get_depth
 )
 
+WORK_DIR = Path(os.environ["MOCAP_WORKDIR"])
+
 class RTMPoseDetector_BothSides:
     def __init__(self, model_config, draw_landmarks):
         self._draw_landmarks = draw_landmarks
@@ -31,8 +34,8 @@ class RTMPoseDetector_BothSides:
         self._mmpose_cvt_color = model_config["convert_color_channel"]
         self._person_detection_activation = model_config["person_detection"]["is_enable"]
         self._landmarks_thres = model_config["landmark_thresh"]
-        person_detector_config = model_config["person_detection"]["person_detector_config"]
-        person_detector_weight = model_config["person_detection"]["person_detector_weight"]
+        person_detector_config = str(WORK_DIR / model_config["person_detection"]["person_detector_config"])
+        person_detector_weight = str(WORK_DIR / model_config["person_detection"]["person_detector_weight"])
         if self._person_detection_activation:
             if os.path.isdir(person_detector_weight):
                 # Run TensorRT model
@@ -51,8 +54,8 @@ class RTMPoseDetector_BothSides:
             self._person_detector = None
 
         self._pose_estimation_activation = model_config["pose_estimation"]["is_enable"]
-        pose_estimator_config = model_config["pose_estimation"]["pose_estimator_config"]
-        pose_estimator_weight = model_config["pose_estimation"]["pose_estimator_weight"]
+        pose_estimator_config = str(WORK_DIR / model_config["pose_estimation"]["pose_estimator_config"])
+        pose_estimator_weight = str(WORK_DIR / model_config["pose_estimation"]["pose_estimator_weight"])
         if self._pose_estimation_activation:
             # pose_estimator for left camera
             if os.path.isdir(pose_estimator_weight):
