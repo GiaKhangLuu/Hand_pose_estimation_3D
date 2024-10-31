@@ -91,6 +91,9 @@ mmpose:
     # ---- RTMPOSE-M PRIME----
     pose_estimator_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m_prime/pretrained_rtmpose_m_prime_config.py
     pose_estimator_weight: mmdeploy/rtmpose-trt/rtmpose_m_prime/rtmpose_m_prime_both_sides
+    # ---- RTMPOSE-L PRIME----
+    pose_estimator_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_l_prime/pretrained_rtmpose_l_prime_config.py
+    pose_estimator_weight: mmdeploy/rtmpose-trt/rtmpose_l_prime/rtmpose_l_prime_both_sides
   selected_landmarks_idx:
     - 5 
     - 7 
