@@ -68,11 +68,13 @@ def calibrate(cam, is_found_in_both_cams, showPics=True):
             rvecs=rvecs,
             tvecs=tvecs)
 
+    """
     tomo_imaging_calib_dir = "/home/giakhang/tomo2_imaging/src/tomo_operator_control/tomo_operator_control/configurations/camera"
     tomo_imaging_calib_path = os.path.join(tomo_imaging_calib_dir, calib_filename)
     if os.path.exists(tomo_imaging_calib_path):
         os.remove(tomo_imaging_calib_path)
     shutil.copy(paramPath, tomo_imaging_calib_dir)
+    """
 
     return camMatrix
 

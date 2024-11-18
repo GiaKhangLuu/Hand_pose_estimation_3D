@@ -1,0 +1,180 @@
+send_udp: true
+run_to_collect_data_for_fusing_and_detection: false
+
+fusing_head_landmark_dictionary:
+  - nose                            # 48 
+  - left eye                        # 49
+  - right eye                       # 50 
+  - left ear                        # 51
+  - right ear                       # 52
+fusing_body_landmark_dictionary: # THIS LIST MATCHS THE `selected_landmarks_idx` in `./detection_config.yaml`
+  - left shoulder                   # 0
+  - left elbow                      # 1
+  - left hip                        # 2
+  - right shoulder                  # 3
+  - right hip                       # 4
+  - WRIST                           # 5
+  - THUMB_CMC                       # 6
+  - THUMB_MCP                       # 7
+  - THUMB_IP                        # 8
+  - THUMB_TIP                       # 9
+  - INDEX_FINGER_MCP                # 10
+  - INDEX_FINGER_PIP                # 11
+  - INDEX_FINGER_DIP                # 12
+  - INDEX_FINGER_TIP                # 13
+  - MIDDLE_FINGER_MCP               # 14
+  - MIDDLE_FINGER_PIP               # 15
+  - MIDDLE_FINGER_DIP               # 16
+  - MIDDLE_FINGER_TIP               # 17
+  - RING_FINGER_MCP                 # 18
+  - RING_FINGER_PIP                 # 19
+  - RING_FINGER_DIP                 # 20
+  - RING_FINGER_TIP                 # 21
+  - PINKY_MCP                       # 22
+  - PINKY_PIP                       # 23
+  - PINKY_DIP                       # 24
+  - PINKY_TIP                       # 25
+  - right elbow                     # 26
+  - RIGHT_WRIST                     # 27
+  - RIGHT_THUMB_CMC                 # 28
+  - RIGHT_THUMB_MCP                 # 29
+  - RIGHT_THUMB_IP                  # 30
+  - RIGHT_THUMB_TIP                 # 31
+  - RIGHT_INDEX_FINGER_MCP          # 32
+  - RIGHT_INDEX_FINGER_PIP          # 33
+  - RIGHT_INDEX_FINGER_DIP          # 34
+  - RIGHT_INDEX_FINGER_TIP          # 35
+  - RIGHT_MIDDLE_FINGER_MCP         # 36
+  - RIGHT_MIDDLE_FINGER_PIP         # 37
+  - RIGHT_MIDDLE_FINGER_DIP         # 38
+  - RIGHT_MIDDLE_FINGER_TIP         # 39
+  - RIGHT_RING_FINGER_MCP           # 40
+  - RIGHT_RING_FINGER_PIP           # 41
+  - RIGHT_RING_FINGER_DIP           # 42
+  - RIGHT_RING_FINGER_TIP           # 43
+  - RIGHT_PINKY_MCP                 # 44
+  - RIGHT_PINKY_PIP                 # 45
+  - RIGHT_PINKY_DIP                 # 46
+  - RIGHT_PINKY_TIP                 # 47
+
+fusing_phase:
+  fusing_methods:
+    - transformer_encoder
+    - minimize_distance
+    - ann
+  enable: true
+  fusing_selection_id: 1
+  transformer_encoder: 
+    sequence_length: 5
+    input_dim: 322
+    output_dim: 144  # 144 = 48 * 3 (xyz for 48 keypoints (thumb, left and right hands))
+    num_heads: 7
+    num_encoder_layers: 6
+    dim_feedforward: 512
+    dropout: 0.1
+    model_weight_path: Hand_pose_estimation_3D/src/best_model_2024-08-15-14:03.pth
+  minimize_distance:
+    algo_name: L-BFGS-B
+    tolerance: 1e-3
+  ann:
+    input_dim: 288
+    output_dim: 144
+    hidden_dim: 216
+    num_hidden_layers: 8
+    dropout_rate: 0.1
+    model_weight_path: Hand_pose_estimation_3D/src/runs/ann/20240930/20240930-1308/ann_8_layers_best.pth
+    minmax_scaler_path: Hand_pose_estimation_3D/src/runs/ann/20240930/20240930-1308/input_scaler.pkl
+
+reduce_noise_phase:
+  left_arm_angles_noise_reducer:
+    enable: true
+    statistical_file: Hand_pose_estimation_3D/src/configuration/left_arm_angles_stats.json
+    dim: 1
+  right_arm_angles_noise_reducer:
+    enable: true
+    statistical_file: Hand_pose_estimation_3D/src/configuration/right_arm_angles_stats.json
+    dim: 1
+  left_hand_angles_noise_reducer:
+    enable: true
+    statistical_file: Hand_pose_estimation_3D/src/configuration/left_hand_angles_stats.json
+    dim: 1
+
+camera:
+  frame_calibrated_size:
+    width: 1920
+    height: 1080
+  left_camera:
+    mxid: "18443010E13D641200"
+    left_camera_calibration_path: Hand_pose_estimation_3D/camera_calibration/left_oak_calibration.npz
+  right_camera:
+    mxid: "18443010613E940F00"
+    right_camera_calibration_path: Hand_pose_estimation_3D/camera_calibration/right_oak_calibration.npz
+
+process_frame:
+  frame_size:  # the higher resolution is, the futher distance which can be processed by the system
+    width: 1920
+    height: 1080
+
+utilities:
+  draw_landmarks: true       
+
+  plot_3d: true              
+
+  save_timestamp: true
+  save_left_arm_angles: true
+  save_right_arm_angles: true
+  save_left_hand_angles: true
+  save_landmarks: true      
+  save_images: true
+  save_depth: true
+
+  fusing_head: true
+  fusing_left_arm: true
+  fusing_left_hand: true
+  fusing_right_arm: true
+  fusing_right_hand: true
+
+debugging_mode:
+  draw_xyz: false
+  show_left_arm:
+    show_parent_coordinate: false
+    show_left_arm_joint1: false       # Plotting left arm joint 1 and its reference vector to debug (visualize)
+    show_left_arm_joint2: false       # Plotting left arm joint 2 and its reference vector to debug (visualize)
+    show_left_arm_joint3: false       # Plotting left arm joint 3 and its reference vector to debug (visualize)
+    show_left_arm_joint4: false       # Plotting left arm joint 4 and its reference vector to debug (visualize)
+    show_left_arm_joint5: false       # Plotting left arm joint 5 and its reference vector to debug (visualize)
+    show_left_arm_joint6: false       # Plotting left arm joint 6 and its reference vector to debug (visualize)
+  show_left_hand:
+    THUMB:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false 
+      show_left_finger_joint2: false 
+      show_left_finger_joint3: false 
+    INDEX:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
+    MIDDLE:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
+    RING:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
+    PINKY:
+      show_parent_coordinate: false
+      show_left_finger_joint1: false
+      show_left_finger_joint2: false
+      show_left_finger_joint3: false
+  ref_vector_color: 
+    - 1
+    - 0
+    - 0
+  joint_vector_color: 
+    - 0
+    - 0
+    - 1

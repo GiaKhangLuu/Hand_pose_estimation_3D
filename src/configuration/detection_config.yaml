@@ -1,0 +1,150 @@
+hand_to_fuse: left
+arm_to_fuse: left
+num_person_to_detect: 1
+model_list:
+  - mediapipe
+  - mmpose
+model_selection_id: 1
+mediapipe:
+  convert_color_channel: true
+  hand_detection:
+    is_enable: true
+    min_detection_confidence: 0.3
+    min_presence_confidence: 0.3
+    min_tracking_confidence: 0.3
+    num_hand: 2
+    model_asset_path: Hand_pose_estimation_3D/model_zoo/mediapipe/hand/hand_landmarker.task
+    hand_landmarks:
+      - WRIST
+      - THUMB_CMC
+      - THUMB_MCP
+      - THUMB_IP
+      - THUMB_TIP
+      - INDEX_FINGER_MCP
+      - INDEX_FINGER_PIP
+      - INDEX_FINGER_DIP
+      - INDEX_FINGER_TIP
+      - MIDDLE_FINGER_MCP
+      - MIDDLE_FINGER_PIP
+      - MIDDLE_FINGER_DIP
+      - MIDDLE_FINGER_TIP
+      - RING_FINGER_MCP
+      - RING_FINGER_PIP
+      - RING_FINGER_DIP
+      - RING_FINGER_TIP
+      - PINKY_MCP
+      - PINKY_PIP
+      - PINKY_DIP
+      - PINKY_TIP
+  body_detection:
+    is_enable: true
+    min_detection_confidence: 0.5
+    min_tracking_confidence: 0.5
+    visibility_threshold: 0.2
+    model_asset_path: Hand_pose_estimation_3D/model_zoo/mediapipe/pose/pose_landmarker_lite.task
+    body_landmarks:
+      - nose
+      - left eye (inner)
+      - left eye
+      - left eye (outer)
+      - right eye (inner)
+      - right eye
+      - right eye (outer)
+      - left ear
+      - right ear
+      - mouth (left)
+      - mouth (right)
+      - left shoulder
+      - right shoulder
+      - left elbow
+      - right elbow
+      - left wrist
+      - right wrist
+      - left pinky
+      - right pinky
+      - left index
+      - right index
+      - left thumb
+      - right thumb
+      - left hip
+      - right hip
+      - left knee
+      - right knee
+      - left ankle
+      - right ankle
+      - left heel
+      - right heel
+      - left foot index
+      - right foot index
+mmpose:
+  convert_color_channel: false
+  landmark_thresh: 0.5
+  person_detection:
+    is_enable: true
+    person_detector_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmdet/pretrained_rtmdet_nano_config.py
+    person_detector_weight: mmdeploy/rtmdet-trt/rtmdet-nano
+  pose_estimation:
+    is_enable: true
+    # ---- RTMPOSE-L ----
+    #pose_estimator_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_l/pretrained_rtmpose_l_config.py
+    #pose_estimator_weight: mmdeploy/rtmpose-trt/rtmpose_l/rtmpose_l_both_sides
+    # ---- RTMPOSE-M PRIME----
+    pose_estimator_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_m_prime/pretrained_rtmpose_m_prime_config.py
+    pose_estimator_weight: mmdeploy/rtmpose-trt/rtmpose_m_prime/rtmpose_m_prime_both_sides
+    # ---- RTMPOSE-L PRIME----
+    #pose_estimator_config: Hand_pose_estimation_3D/model_zoo/mmpose/rtmpose/rtmpose_l_prime/pretrained_rtmpose_l_prime_config.py
+    #pose_estimator_weight: mmdeploy/rtmpose-trt/rtmpose_l_prime/rtmpose_l_prime_both_sides
+  selected_landmarks_idx:
+    - 5 
+    - 7 
+    - 11 
+    - 6 
+    - 12  # thumb
+    - 91 
+    - 92 
+    - 93 
+    - 94 
+    - 95 
+    - 96 
+    - 97 
+    - 98 
+    - 99 
+    - 100
+    - 101 
+    - 102 
+    - 103 
+    - 104 
+    - 105 
+    - 106 
+    - 107 
+    - 108 
+    - 109 
+    - 110
+    - 111 # left hand
+    - 8 
+    - 112
+    - 113 
+    - 114 
+    - 115 
+    - 116 
+    - 117 
+    - 118 
+    - 119 
+    - 120 
+    - 121 
+    - 122 
+    - 123 
+    - 124 
+    - 125 
+    - 126 
+    - 127 
+    - 128 
+    - 129 
+    - 130 
+    - 131 
+    - 132  # right hand
+    - 0
+    - 1
+    - 2 
+    - 3
+    - 4  # head
