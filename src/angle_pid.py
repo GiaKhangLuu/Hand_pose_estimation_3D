@@ -26,4 +26,4 @@ class AnglePID:
 
         self._error_last = error
 
-        return p_next, a_current
+        return p_next, a_current, self._v_current

@@ -67,7 +67,13 @@ current_angles_for_parts = {
     "head": np.zeros(NUM_HEAD_ANGLES, dtype=np.float64),
     "left_arm": np.zeros(NUM_LEFT_ARM_ANGLES, dtype=np.float64),
     "right_arm": np.zeros(NUM_RIGHT_ARM_ANGLES, dtype=np.float64),
-    "left_fingers": np.zeros(NUM_LEFT_HAND_ANGLES, dtype=np.float64)
+    "left_fingers": np.zeros(NUM_LEFT_HAND_ANGLES, dtype=np.float64),
+}
+current_velocities_for_parts = {
+    "head_vel": [0] * NUM_HEAD_ANGLES,
+    "left_arm_vel": [0] * NUM_LEFT_ARM_ANGLES, 
+    "right_arm_vel": [0] * NUM_RIGHT_ARM_ANGLES,
+    "left_fingers_vel": [0] * NUM_LEFT_HAND_ANGLES
 }
 
 def degree_to_radian(degree):
@@ -81,6 +87,7 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
     """
     
     global current_angles_for_parts 
+    global current_velocities_for_parts
     global global_timestamp
 
     for part in pid_manager.keys():
@@ -108,7 +115,7 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
 
     local_timestamp = 0
 
-    WRITE_ANGLE_TO_FILE_ENABLE = True
+    WRITE_ANGLE_TO_FILE_ENABLE = False
     LEFT_ARM_ANGLES_COLUMN_NAMES = ["frame_id", "time", "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"]
     CSV_FILE = "/home/giakhang/Desktop/debug_left_arm_angle.csv"
     if WRITE_ANGLE_TO_FILE_ENABLE:
@@ -130,8 +137,9 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
             for joint_i in range(len(pid_manager[part])):
                 angle_pid = pid_manager[part][joint_i]
                 ji_curr_angle = current_angles_for_parts[part][joint_i]
-                ji_next_angle, _ = angle_pid.update(ji_curr_angle)
+                ji_next_angle, _, ji_next_vel = angle_pid.update(ji_curr_angle)
                 next_angles_for_parts[part][joint_i] = ji_next_angle
+                current_velocities_for_parts[f"{part}_vel"][joint_i] = ji_next_vel
             
         current_angles_for_parts = next_angles_for_parts.copy()
 
@@ -148,10 +156,10 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
         current_rad_angles_for_parts["id"] = [global_timestamp, local_timestamp]
         local_timestamp += 1
 
-        udp_mess = str(current_rad_angles_for_parts)
+        udp_mess = str({**current_rad_angles_for_parts, **current_velocities_for_parts})
         CLIENT_SOCKET.sendto(udp_mess.encode(), (SERVER_IP, SERVER_PORT))
 
-        #print(udp_mess)
+        print(udp_mess)
 
         left_arm_angles = next_angles_for_parts["left_arm"]
         if WRITE_ANGLE_TO_FILE_ENABLE:

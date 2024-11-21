@@ -281,7 +281,7 @@ if __name__ == "__main__":
     RAW_LEFT_ARM_ANGLES_COLUMN_NAMES = ["time", "raw_joint1", "raw_joint2", "raw_joint3", "raw_joint4", "raw_joint5", "raw_joint6"]
     RAW_LEFT_ARM_ANGLE_CSV_FILE = "/home/giakhang/Desktop/raw_debug_left_arm_angle.csv"
 
-    create_csv(RAW_LEFT_ARM_ANGLE_CSV_FILE, RAW_LEFT_ARM_ANGLES_COLUMN_NAMES)
+    #create_csv(RAW_LEFT_ARM_ANGLE_CSV_FILE, RAW_LEFT_ARM_ANGLES_COLUMN_NAMES)
 
     time.sleep(WAIT_TIME_TO_STAND_IN_POSITION)
 
@@ -490,10 +490,10 @@ if __name__ == "__main__":
                 right_arm_angles_to_send = np.array(right_arm_angles)
                 left_hand_angles_to_send = np.array(left_hand_angles)
 
-                append_to_csv(
-                    RAW_LEFT_ARM_ANGLE_CSV_FILE, 
-                    [time.time(), *left_arm_angles_to_send]
-                )
+                #append_to_csv(
+                    #RAW_LEFT_ARM_ANGLE_CSV_FILE, 
+                    #[time.time(), *left_arm_angles_to_send]
+                #)
 
                 add_timestamp(timestamp_each_stage)
 
