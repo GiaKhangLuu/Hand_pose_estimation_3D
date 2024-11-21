@@ -239,7 +239,7 @@ def create_files(
 
     current_time = datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
     current_date = datetime.now().strftime('%Y-%m-%d')
-    DATA_DIR = WORK_DIR / os.path.join(CURRENT_DIR, "../..", "data", current_date)
+    DATA_DIR = WORK_DIR / os.path.join("data", current_date)
     if not os.path.exists(DATA_DIR):
         os.mkdir(DATA_DIR)
     DATA_DIR = os.path.join(DATA_DIR, current_time)

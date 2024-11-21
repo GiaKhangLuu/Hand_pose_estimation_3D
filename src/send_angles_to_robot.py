@@ -19,7 +19,7 @@ from configuration.pid_config import (
 from csv_writer import create_csv, append_to_csv
 
 CLIENT_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-SERVER_IP = "192.168.0.140"
+SERVER_IP = "127.0.0.1"
 SERVER_PORT = 12345
 global_timestamp = 0
 
@@ -69,15 +69,10 @@ current_angles_for_parts = {
     "right_arm": np.zeros(NUM_RIGHT_ARM_ANGLES, dtype=np.float64),
     "left_fingers": np.zeros(NUM_LEFT_HAND_ANGLES, dtype=np.float64),
 }
-current_velocities_for_parts = {
-    "head_vel": [0] * NUM_HEAD_ANGLES,
-    "left_arm_vel": [0] * NUM_LEFT_ARM_ANGLES, 
-    "right_arm_vel": [0] * NUM_RIGHT_ARM_ANGLES,
-    "left_fingers_vel": [0] * NUM_LEFT_HAND_ANGLES
-}
+
 
 def degree_to_radian(degree):
-    radian = degree * math.pi / 180 
+    radian = np.round(degree * math.pi / 180, 4) 
     return radian
 
 def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
@@ -87,7 +82,6 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
     """
     
     global current_angles_for_parts 
-    global current_velocities_for_parts
     global global_timestamp
 
     for part in pid_manager.keys():
@@ -132,31 +126,38 @@ def send_angles_to_robot_using_pid(target_angles_queue=None, degree=True):
                     pid_manager[part][joint_i].update_setpoint(target_angle)
 
         next_angles_for_parts = dict()
+        next_vels_for_parts = dict()
         for part in pid_manager.keys():
             next_angles_for_parts[part] = np.zeros(len(pid_manager[part]), dtype=np.float64)
+            next_vels_for_parts[f"{part}_vel"] = np.zeros(len(pid_manager[part]), dtype=np.float64)
             for joint_i in range(len(pid_manager[part])):
                 angle_pid = pid_manager[part][joint_i]
                 ji_curr_angle = current_angles_for_parts[part][joint_i]
                 ji_next_angle, _, ji_next_vel = angle_pid.update(ji_curr_angle)
                 next_angles_for_parts[part][joint_i] = ji_next_angle
-                current_velocities_for_parts[f"{part}_vel"][joint_i] = ji_next_vel
+                next_vels_for_parts[f"{part}_vel"][joint_i] = ji_next_vel
             
         current_angles_for_parts = next_angles_for_parts.copy()
+        current_vels_for_parts = next_vels_for_parts.copy()
 
         end_time = time.time()
         delta_t = end_time - start_time
         start_time = end_time
 
         current_rad_angles_for_parts = current_angles_for_parts.copy() 
+        current_rad_vels_for_parts = current_vels_for_parts.copy()
         if degree:
             for part in current_angles_for_parts.keys():
                 current_rad_angles_for_parts[part] = degree_to_radian(current_angles_for_parts[part].copy())
                 current_rad_angles_for_parts[part] = current_rad_angles_for_parts[part].tolist()
+
+                current_rad_vels_for_parts[f"{part}_vel"] = degree_to_radian(current_vels_for_parts[f"{part}_vel"].copy())
+                current_rad_vels_for_parts[f"{part}_vel"] = current_rad_vels_for_parts[f"{part}_vel"].tolist()
         
-        current_rad_angles_for_parts["id"] = [global_timestamp, local_timestamp]
+        #current_rad_angles_for_parts["id"] = [global_timestamp, local_timestamp]
         local_timestamp += 1
 
-        udp_mess = str({**current_rad_angles_for_parts, **current_velocities_for_parts})
+        udp_mess = str({**current_rad_angles_for_parts, **current_rad_vels_for_parts})
         CLIENT_SOCKET.sendto(udp_mess.encode(), (SERVER_IP, SERVER_PORT))
 
         print(udp_mess)
